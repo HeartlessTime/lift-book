@@ -1,0 +1,300 @@
+/* ============================================================================
+   Lift Book — navigation motion
+   ----------------------------------------------------------------------------
+   Loaded by main.jsx after _motion.css, so the tokens, the shared keyframes and
+   the `[data-press]` system are already in hand and anything here can override
+   the foundation where the chrome needs it.
+
+   Two things live in this file:
+
+     1. THE TAB BAR — a highlight that travels between tabs, an icon that
+        settles when it is selected, and the raised Start/Resume disc's press
+        response and state morph.
+     2. THE ROUTE TRANSITION — the view change the app has always done, but
+        with a direction to it.
+
+   House rules from _motion.css apply unchanged — transform and opacity only,
+   exit shorter than entry and along the same path, bounce only where something
+   landed.
+   ========================================================================== */
+
+/* ====================== the travelling tab highlight ===================== */
+/*
+   The bar used to say which tab you were on by colour alone: the old tab went
+   grey and the new one went accent, on the same frame, with nothing connecting
+   them. A highlight that travels says the same thing but also says the two are
+   the same control in two states, which is most of what makes a native tab bar
+   read as one object rather than five buttons.
+
+   GEOMETRY IS MEASURED, NOT ASSUMED. The obvious implementation is percentages:
+   five `flex:1` children tile the row, so slot i starts at i*20% and the whole
+   thing is one `translateX(calc(var(--i) * 100%))` with no JavaScript at all.
+   It does not work, because an absolutely positioned child resolves `left` and
+   `width` against its offset parent's PADDING box while the flex items sit in
+   the CONTENT box — and `#tabbar` is padded, by `0 6px` on a phone and `0 10px`
+   once the bar becomes a floating pill on a wide screen. Percentage maths would
+   have to restate both of those numbers here, in a file that does not own them
+   (they live in index.css, which three other workstreams share), and get them
+   wrong the day someone retunes the padding. So TabBar.jsx measures the active
+   button and hands the answer down as four custom properties.
+
+   It uses `offsetLeft`/`offsetTop` rather than `getBoundingClientRect()` on
+   purpose: offsets are expressed from the offset parent's padding edge, which
+   is the exact coordinate space `position:absolute; left:0; top:0` lands in, so
+   there is no hairline-border correction to remember. The cost is that offsets
+   are integers, so a sub-pixel flex width can round by up to a pixel — invisible
+   on a soft tinted pill, and a fair trade for not doing box-model arithmetic.
+
+   Only the transform is ever transitioned. `--tab-w`/`--tab-h` are assigned, not
+   animated; they change on a rotation and at no other time, and animating them
+   would be animating width and height, which is the one thing rule 1 forbids.
+*/
+.tabbar__ind {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 0;
+  width: var(--tab-w, 0px);
+  height: var(--tab-h, 0px);
+  border-radius: var(--r);
+  background: color-mix(in srgb, var(--acc) 13%, transparent);
+  transform: translate3d(var(--tab-x, 0px), var(--tab-y, 0px), 0);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* The buttons have no stacking position of their own, so without this the pill
+   paints over the icon it is supposed to sit behind. */
+#tabbar button { position: relative; z-index: 1 }
+
+/* `data-ind` is "off" on the routes that no tab owns — /workout and /admin, and
+   anything that falls through to the redirect. The pill fades out and keeps its
+   last position rather than sliding to a slot it does not have; coming back it
+   fades in at the new tab, having travelled while it was invisible. */
+#tabbar[data-ind="on"] .tabbar__ind { opacity: 1 }
+
+/*
+   FIRST PAINT IS THE WHOLE PROBLEM HERE. The pill's resting transform is
+   `translate3d(0,0,0)` — the far left of the bar — so if the transition is live
+   on mount the very first measurement animates the highlight in from under the
+   Home tab, which is wrong on every route except Home and looks like the app is
+   still loading on all of them.
+
+   The transition is therefore declared only under `[data-armed]`, and TabBar
+   sets that attribute two animation frames after mount. Two, not one: the
+   measuring layout effect runs before the first paint, so a single rAF callback
+   would still land inside the frame that first computes style for this element,
+   and the browser would resolve the new transition and the changed transform in
+   one pass and animate from the initial value anyway. Letting a whole frame
+   paint un-armed gives the transition a settled "before" value to start from,
+   and that value is already the position we want — so nothing moves.
+
+   The same disarm/measure/re-arm cycle runs on resize, so rotating the phone
+   (or the bar turning into a floating pill at the wide breakpoint) repositions
+   the highlight instantly instead of sliding it across the new layout.
+*/
+#tabbar[data-armed="1"] .tabbar__ind {
+  transition:
+    transform var(--t-med) var(--ease-spring),
+    opacity var(--t-fast) linear;
+}
+
+/* THE SAME PROBLEM, ONE ROUTE LATER. Coming back from /workout or /admin the pill has
+   been invisible, so the slot it is parked in is not where it has been — it is only
+   where it was last seen. Flipping `data-ind` back to "on" and assigning the new
+   `--tab-x` happens in one style resolution, so with the transform transition live the
+   pill fades in while gliding the width of the bar, which is the one thing the note
+   above says it must not do. TabBar sets `data-jump` on that frame and drops it two
+   frames later. Only the transform goes: the fade stays, because the pill reappearing
+   is a real event and reads better seen than switched on. */
+#tabbar[data-jump="1"] .tabbar__ind { transition: opacity var(--t-fast) linear }
+
+/*
+   The highlight is driven off the route, never off the tap. That is not just
+   tidiness: finishing a workout calls nav('/home') from a sheet, a tapped
+   weigh-in notification opens straight into a view, and /plan/r/:id keeps the
+   Plan tab lit — none of those are a tab press, and all of them have to move the
+   pill. Deriving it from `useLocation` is the only version that cannot drift out
+   of step with what is actually on screen.
+*/
+
+/* --------------------------------------------------- the icon that settles -- */
+/*
+   Selection gets a beat of its own. The dip-and-return is carried by
+   `--ease-spring`, which is a `linear()` approximation of a real spring: the
+   overshoot lives in the curve rather than in an explicit >1 keyframe, so this
+   stays a two-stop animation and cannot double-bounce the way an overshooting
+   keyframe on an overshooting curve would.
+
+   It fires whenever `.on` starts matching, which includes the first paint after
+   a cold start. That is deliberate — the bar arriving with its current tab
+   giving one small nod is a better boot than five inert glyphs — and it is also
+   why TabBar's `Tab` had to be hoisted to module scope. Declared inside the
+   component body it was a fresh component type on every render, so React threw
+   the buttons away and rebuilt them each time, and this would have fired on
+   every unrelated re-render of the shell.
+*/
+@keyframes nav-icon-settle { from { transform: scale(.84) } to { transform: none } }
+
+#tabbar button.on .icn { animation: nav-icon-settle var(--t-med) var(--ease-spring) }
+
+/* ================= the raised Start / Resume disc ======================== */
+/*
+   The press response already exists and is not reinvented here: `.start` is a
+   <button>, so press.js marks it on pointerdown and _motion.css paints
+   `#tabbar button.start[data-press] .cir { transform: scale(.93) }`. What was
+   missing is the shape of the two halves of that press. index.css gives the disc
+   one symmetric `--fast`/`--ease-sheet` transition, so it takes as long to go
+   down as it does to come back and neither end has any character.
+
+   Split it in two instead, which is what a physical button does: the press is
+   immediate and decelerating (--t-press, --ease-out) because it is tracking a
+   finger, and the release settles on the spring because nothing is driving it
+   any more. Two rules on the same property, selected by the press state, is the
+   whole trick — no JS and no second animation.
+*/
+#tabbar button.start .cir {
+  transition:
+    transform var(--t-med) var(--ease-spring),
+    background var(--t-med) linear,
+    box-shadow var(--t-med) linear;
+}
+#tabbar button.start[data-press] .cir {
+  transition: transform var(--t-press) var(--ease-out);
+}
+
+/*
+   THE START → RESUME MORPH. Starting a workout changed four things at once and
+   all of them cut: the glyph swapped dumbbell for play, the label swapped Start
+   for Resume, the disc went lime to orange, and the pulsing ring appeared. The
+   colour and the ring were always going to be a fade; the two swaps were a hard
+   replace, which is what made the whole thing read as a re-render rather than as
+   one control changing state.
+
+   Both glyphs are now always in the DOM, stacked on top of each other inside the
+   disc, and the state picks which one is shown. The outgoing one shrinks and
+   turns out of the way while the incoming one grows and turns into place, so the
+   disc is never empty and there is no frame where it is holding nothing. That
+   overlap is why `.72` is allowed here despite rule 4's floor of .92-.96: that
+   rule exists to stop things growing out of nothing, and nothing here is ever
+   alone on screen.
+
+   `background` and `box-shadow` are neither transform nor opacity, which rule 1
+   normally rules out. They are allowed on this one element because neither lays
+   anything out — they are paint on a single 52px disc, and the change happens
+   once when a workout starts, not dozens of times a session.
+*/
+#tabbar button.start .cir .tabbar__glyph {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* index.css's `#tabbar button.start span { color: var(--acc) }` reaches every
+     span inside the button, this wrapper included, and `.cir .icn` takes its
+     colour by `inherit` — so without this the glyph would paint accent-on-accent
+     and disappear into the disc. It is the same trap the comment beside that
+     rule in index.css warns about; the wrapper has to hand the disc's own colour
+     through rather than stand in the way of it. */
+  color: inherit;
+  transition:
+    opacity var(--t-fast) linear,
+    transform var(--t-med) var(--ease-spring);
+}
+#tabbar button.start .cir .tabbar__glyph[data-show="0"] {
+  opacity: 0;
+  transform: scale(.72) rotate(-35deg);
+}
+
+/* The label cross-fades in a one-cell grid rather than by swapping its text.
+   Both words occupy the same cell, so the button is always as wide as the longer
+   of them and changing state cannot reflow the row — and a cross-fade needs both
+   strings present anyway. */
+#tabbar button.start .tabbar__label { display: grid; justify-items: center }
+#tabbar button.start .tabbar__label > span {
+  grid-area: 1 / 1;
+  transition: opacity var(--t-fast) linear;
+}
+#tabbar button.start .tabbar__label > span[data-show="0"] { opacity: 0 }
+
+/* ==================== directional route transitions ====================== */
+/*
+   Every view change used to play the same `viewfade` — a 4px rise and a fade,
+   identical going out to a detail screen and coming back from one. It is a
+   perfectly good arrival and a completely mute one: it never says whether you
+   went deeper or came back.
+
+   WHY NOT THE VIEW TRANSITIONS API. It was the first thing tried and it is not
+   available to this app, for two independent reasons, both read out of
+   node_modules/react-router rather than assumed:
+
+     · React Router 7's `viewTransition` option only exists on the DATA router.
+       `startViewTransition` appears in the package solely inside the subscriber
+       that `RouterProvider` drives (chunk-62JRHF6Z.mjs, ~6741). This app mounts
+       `HashRouter`, which is declarative mode — a component holding its own
+       `useState` and a `history.listen` layout effect (~10429) that never
+       reaches that code. Passing `viewTransition` there is silently ignored,
+       which is the worst possible failure mode for an animation.
+
+     · Hand-rolling it does not rescue it either. `document.startViewTransition`
+       needs the DOM to be new by the time its callback returns, and HashRouter
+       dispatches its location update inside `React.startTransition`. A
+       transition-lane update is precisely the thing `flushSync` cannot force
+       out, so the snapshot would keep catching the old view. The only lever is
+       `<HashRouter useTransitions={false}>`, and trading the whole app's
+       navigation scheduling for a page slide is not a trade worth making.
+
+   So the direction is carried by machinery the app already has. `#app` is keyed
+   on the pathname, so React hands us a brand new element on every route change
+   and its enter animation restarts for free; App.jsx stamps a `data-dir` on that
+   element and the two rules below do the rest. Nothing about the key changes, so
+   the reason it exists — a view that throws is contained to that route, and
+   switching tabs remounts the boundary so the tab bar is always a way out — is
+   untouched.
+
+   TRAVEL IS 28px, NOT A FULL PAGE WIDTH. A real iOS push slides two views past
+   each other, and there is only ever one here: the outgoing view is unmounted on
+   the same frame, so a 100% slide would be a lone screen coasting in across a
+   flat background with nothing behind it, which reads as broken rather than as
+   deep. A short offset plus the fade says the same thing honestly. Pointing that
+   travel rightwards is safe because index.css already sets `overflow-x: clip` on
+   both html and body, so it cannot open a horizontal rubber-band on the way in.
+*/
+@keyframes nav-enter-fwd  { from { opacity: 0; transform: translate3d(28px, 0, 0) }  to { opacity: 1; transform: none } }
+@keyframes nav-enter-back { from { opacity: 0; transform: translate3d(-28px, 0, 0) } to { opacity: 1; transform: none } }
+
+#app.vfade[data-dir="fwd"]  { animation: nav-enter-fwd  var(--t-med) var(--ease-out) }
+#app.vfade[data-dir="back"] { animation: nav-enter-back var(--t-med) var(--ease-out) }
+/* `data-dir="none"` is left to index.css's plain `viewfade` on purpose: a cold
+   boot, and a move between two screens that are genuinely peers on both axes
+   (Home ↔ Settings, one routine ↔ another), have no direction to show. Inventing
+   one would be lying about the shape of the app. */
+
+/* ======================== reduced motion ================================= */
+/*
+   _motion.css's global block clamps durations and flattens curves for everything
+   matching `*`, which covers the tab bar's transitions and the route animation's
+   timing — but it cannot reach a keyframe it has never heard of, so the travel
+   inside these would still be travel, just at 180ms. They are redefined here the
+   same way the foundation redefines its own: replacing a @keyframes later in the
+   cascade replaces it wholesale, so every rule above keeps working untouched and
+   simply stops moving.
+
+   What survives is the confirmation, per rule 6. The route still cross-fades, the
+   selected icon still comes up to full strength, and the disc's glyph still
+   cross-fades — so no state change is silent. What goes is everything that
+   travels: the pill arrives at the new tab instead of sliding to it, and the
+   glyph swaps without the shrink and the turn.
+*/
+@media (prefers-reduced-motion: reduce) {
+  @keyframes nav-enter-fwd   { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes nav-enter-back  { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes nav-icon-settle { from { opacity: .4 } to { opacity: 1 } }
+
+  /* A 180ms linear slide is still a slide. The highlight is the one thing here
+     carrying no meaning of its own — the tab's colour already says which one is
+     selected — so it simply arrives. */
+  #tabbar[data-armed="1"] .tabbar__ind { transition: opacity var(--t-fast) linear }
+
+  #tabbar button.start .cir .tabbar__glyph[data-show="0"] { transform: none }
+}

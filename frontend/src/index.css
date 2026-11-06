@@ -1,0 +1,1172 @@
+/* ============================================================================
+   Lift Book — design system
+   ----------------------------------------------------------------------------
+   Rebuilt around four rules, each aimed at a specific "generated" tell in the
+   previous sheet:
+
+   1. ONE TYPE SCALE, MOSTLY REGULAR WEIGHT. The old sheet set font-weight 700/800
+      on nearly every element, which flattens hierarchy — when everything shouts,
+      position is the only cue left. Here weight carries meaning: 600 for a title,
+      400 for its content, and size does the rest.
+   2. A NEUTRAL SURFACE RAMP. Cards are near-neutral greys a few points apart, not
+      saturated blue-greys. Colour is spent only on the accent and on status.
+   3. HAIRLINES, NOT BORDERS. Separators are sub-pixel and inset past the icon
+      rail, so a list reads as one object instead of a stack of outlined boxes.
+   4. MOTION THAT BEHAVES LIKE A NATIVE APP. This app is installed on a phone and
+      used one-handed in a garage, so it moves the way iOS moves, not the way a
+      web page does. Everything tappable answers on pointerdown, not on click.
+      Everything that arrives also leaves — enter decelerates, exit accelerates
+      and is always shorter. A gesture that carried momentum is allowed to land
+      with a spring; nothing that merely appeared is. Transform and opacity only,
+      because WKWebView gives web animations 60fps and 16.6ms a frame. And motion
+      is a message, never decoration: a repeated action (the set tick fires dozens
+      of times a session) stays under 300ms, and reduced-motion drops the travel
+      but keeps the confirmation. The tokens and the mechanics live in
+      styles/_motion.css; the per-area sheets beside it build on them.
+   5. ONE SURFACE, BORROWED FROM THE LOCK SCREEN. The Live Activity card
+      (ios/App/RestTimerWidget/RestTimerLiveActivity.swift, CardBackground) is the
+      look: a near-black vertical gradient, the account's accent glowing in from
+      the top-trailing corner, hairline diagonal hatching, rounded tabular digits.
+      The FULL glow (.glow) is spent only where the card itself would be — the
+      thing to do now, the set in hand, the rest, the finish, the headline stats.
+      Lists and settings get the same dark family and hairline edge with no glow,
+      so the glow keeps meaning "this one". The glow stays dark in light mode, the
+      way a widget does, and re-states its own text tokens so contrast holds.
+   ========================================================================== */
+
+/* ---------------------------------------------------------------- tokens -- */
+:root {
+  /* surfaces — dark is the default. The lock-screen card's family: #1A1B1F at the
+     top falling to #0B0B0D, so flat fills sit a few points off that ramp and
+     cards carry the gradient itself (--surface-grad). */
+  --bg:        #080706;
+  --bg-el:     #12110f;   /* elevated backdrop (sheets, bars) */
+  --surface:   #1a1816;   /* card / grouped-list fill */
+  --surface-2: #272421;   /* pressed + nested fill */
+  --surface-3: #37332f;   /* controls (segmented track, switch off) */
+  --surface-grad: linear-gradient(180deg,#1c1a18 0%,#151412 100%);
+  --sheet-grad:   linear-gradient(180deg,#1c1a18 0,#100f0d 260px);
+  /* the card's hairline edge: white 3.5% on the glow, a touch more on calm cards
+     where there is no glow to draw the outline */
+  --edge:      rgba(239,233,222,.07);
+  --edge-glow: rgba(239,233,222,.05);
+
+  /* the glow card's own palette — fixed, because the card is dark in either theme */
+  --card-top:  #1d1a17;
+  --card-bot:  #0c0b0a;
+  --hatch:     rgba(255,255,255,.035);
+
+  /* rounded digits, the widget's `.rounded` design + monospacedDigit() */
+  --font-num:  ui-rounded,'SF Pro Rounded',system-ui,-apple-system,sans-serif;
+  /* eyebrow labels read in the accent; light mode swaps to the darker --acc-2 so a
+     yellow or lime eyebrow on white still clears contrast */
+  --eyebrow:   var(--acc);
+
+  /* text */
+  --label:     #f3eee6;
+  --label-2:   #aca598;
+  --label-3:   #8a847a;   /* muted: meta and captions only, ~5:1 on the page */
+  --label-4:   rgba(239,233,222,.18);
+
+  /* lines */
+  --sep:       rgba(239,233,222,.10);
+  --sep-op:    rgba(239,233,222,.08);   /* for edges sitting over blur */
+  --hair:      .5px;
+
+  /* system palette (iOS dark values) */
+  --blue:#0a84ff; --green:#30d158; --red:#ff453a; --orange:#ff9f0a;
+  --yellow:#ffd60a; --teal:#40c8e0; --indigo:#5e5ce6; --pink:#ff375f;
+  --purple:#bf5af2; --mint:#63e6e2; --brown:#ac8e68; --grey:#8e8e93;
+
+  /* accent (per-account, synced) */
+  --acc:  var(--green);
+  --acc-2:#248a3d;
+  --on-acc:#000000;
+  --acc-soft: color-mix(in srgb, var(--acc) 16%, transparent);
+  --acc-line: color-mix(in srgb, var(--acc) 38%, transparent);
+
+  /* geometry */
+  --r-sm:8px; --r:12px; --r-lg:16px; --r-xl:20px; --r-card:16px;
+  --r-glow:20px;   /* the lock-screen card's large continuous corner */
+  --pad:16px;
+  --icon-stroke:1.7;
+
+  /* motion — see styles/_motion.css for the rules these serve */
+  --ease-out:  cubic-bezier(.16,1,.3,1);      /* entry: arrives fast, settles */
+  --ease-in:   cubic-bezier(.7,0,.84,0);      /* exit: sits, then leaves */
+  --ease-sheet:cubic-bezier(.32,.72,0,1);     /* the iOS sheet curve */
+  /* A snappy, barely-bouncy spring — a second-order step response at damping
+     ratio .85 (Apple's bounce ≈ .15), 300ms response, sampled to 17 stops. The
+     overshoot is deliberately tiny: a pop reads through its RISE, not through
+     how far past the mark it goes, so the amplitude belongs in the keyframe and
+     the personality belongs here. */
+  --ease-spring:linear(0 0%, 0.1106 6%, 0.3245 13%, 0.5378 19%, 0.7102 25%, 0.8334 31%, 0.9137 38%, 0.9618 44%, 0.988 50%, 1.0006 56%, 1.0054 63%, 1.0063 69%, 1.0054 75%, 1.004 81%, 1.0027 88%, 1.0017 94%, 1 100%);
+
+  --t-press:110ms; --t-fast:160ms; --t-med:200ms; --t-slow:300ms;
+  --t-exit:160ms;                             /* always shorter than the entrance */
+
+  /* the old names, kept working so nothing in 960 lines below has to move */
+  --ease:var(--ease-sheet);
+  --fast:var(--t-fast); --med:var(--t-med);
+
+  --sab:env(safe-area-inset-bottom,0px);
+  --sat:env(safe-area-inset-top,0px);
+  /* height the on-screen keyboard is covering — published by Modals while a sheet is open */
+  --kb:0px;
+}
+
+:root[data-theme="light"] {
+  --bg:        #f5f2ec;
+  --bg-el:     #faf8f4;
+  --surface:   #fdfbf7;
+  --surface-2: #eee8de;
+  --surface-3: #e4ddd1;
+  --surface-grad: linear-gradient(180deg,#fdfbf7 0%,#faf7f2 100%);
+  --sheet-grad:   none;
+  --edge:      rgba(31,27,22,.07);
+  --eyebrow:   var(--acc-2);
+
+  --label:     #1f1b16;
+  --label-2:   #5e554a;
+  --label-3:   #7b7266;
+  --label-4:   rgba(31,27,22,.16);
+
+  --sep:       rgba(31,27,22,.12);
+  --sep-op:    rgba(31,27,22,.09);
+
+  --blue:#007aff; --green:#34c759; --red:#ff3b30; --orange:#ff9500;
+  --yellow:#ffcc00; --teal:#30b0c7; --indigo:#5856d6; --pink:#ff2d55;
+  --purple:#af52de; --mint:#00c7be; --brown:#a2845e; --grey:#8e8e93;
+  --acc-2:#248a3d;
+  --on-acc:#ffffff;
+}
+
+/* accents — Apple's system colours, so a recolour never looks off-system */
+:root[data-accent="lime"]  { --acc:var(--green);  --acc-2:#248a3d; --on-acc:#000 }
+:root[data-accent="sky"]   { --acc:var(--blue);   --acc-2:#0060df; --on-acc:#fff }
+:root[data-accent="orange"]{ --acc:var(--orange); --acc-2:#c76b00; --on-acc:#000 }
+:root[data-accent="violet"]{ --acc:var(--purple); --acc-2:#8944ab; --on-acc:#fff }
+:root[data-accent="pink"]  { --acc:var(--pink);   --acc-2:#d70036; --on-acc:#fff }
+:root[data-accent="red"]   { --acc:var(--red);    --acc-2:#d70015; --on-acc:#fff }
+:root[data-accent="teal"]  { --acc:var(--teal);   --acc-2:#0071a4; --on-acc:#000 }
+:root[data-accent="gold"]  { --acc:var(--yellow); --acc-2:#b25000; --on-acc:#000 }
+/* Label colour on a filled accent button is picked per accent by measured contrast,
+   not by taste. Button text is 17px/600, so the AA bar is 3:1 (large text). White on
+   the light-theme green is 2.22:1 and on teal 2.57:1 — both fail, and green is the
+   DEFAULT accent, so every primary button in light mode was failing. Black scores
+   9.46 / 8.16 there. Blue, purple, pink and red keep white (3.5–4.1:1), which both
+   passes and matches the platform convention. */
+:root[data-theme="light"][data-accent="lime"],
+:root[data-theme="light"][data-accent="teal"]  { --on-acc:#000 }
+:root[data-theme="light"][data-accent="sky"],
+:root[data-theme="light"][data-accent="violet"],
+:root[data-theme="light"][data-accent="pink"],
+:root[data-theme="light"][data-accent="red"]   { --on-acc:#fff }
+
+/* ---------------------------------------------------------------- reset -- */
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{
+  font-size:16px;background:var(--bg);overscroll-behavior:none;overflow-x:clip;
+  -webkit-text-size-adjust:100%;
+}
+body{
+  background:var(--bg);color:var(--label);
+  font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','SF Pro Display','Segoe UI',Roboto,system-ui,sans-serif;
+  font-size:17px;line-height:1.29;letter-spacing:0;
+  min-height:100vh;overscroll-behavior-y:none;overflow-x:clip;
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+  touch-action:manipulation;
+  font-variant-numeric:tabular-nums;
+}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer;letter-spacing:inherit}
+input,select,textarea{font:inherit;color:var(--label);letter-spacing:inherit}
+img{max-width:100%}
+a{color:var(--acc);text-decoration:none}
+:focus{outline:none}
+:focus-visible{outline:2.5px solid var(--acc);outline-offset:2px;border-radius:6px}
+button,.chip,.tile,.item,.wday,.cal-d,.swatch,.hm-c,.lrow,.seg button,.stp button,.sld
+{-webkit-user-select:none;user-select:none}
+
+/* icons inherit colour and optical size from their context */
+.icn{
+  width:1em;height:1em;flex:none;display:block;
+  fill:none;stroke:currentColor;stroke-width:var(--icon-stroke);
+  stroke-linecap:round;stroke-linejoin:round;
+}
+
+/* prefers-reduced-motion is handled in styles/_motion.css. It is NOT a blanket
+   `animation:none` any more: that also deleted the tick that confirms a set. */
+
+/* ------------------------------------------------------------ type scale -- */
+.t-large  {font-size:34px;line-height:1.06;font-weight:600;letter-spacing:-.02em}
+.t-title  {font-size:28px;line-height:1.12;font-weight:600;letter-spacing:-.01em}
+.t-title2 {font-size:22px;line-height:1.18;font-weight:600;letter-spacing:-.005em}
+.t-head   {font-size:17px;line-height:1.29;font-weight:600;letter-spacing:-.012em}
+.t-body   {font-size:17px;line-height:1.29;font-weight:400;letter-spacing:-.012em}
+.t-callout{font-size:16px;line-height:1.31;font-weight:400;letter-spacing:-.009em}
+.t-sub    {font-size:15px;line-height:1.33;font-weight:400;letter-spacing:0}
+.t-foot   {font-size:13px;line-height:1.38;font-weight:400;letter-spacing:0}
+.t-cap    {font-size:12px;line-height:1.33;font-weight:400;letter-spacing:0}
+
+.muted{color:var(--label-2)} .dim{color:var(--label-3)}
+.small{font-size:13px;line-height:1.38}
+.accent{color:var(--acc)}
+.capitalize{text-transform:capitalize}
+/* exercise names and body-part/equipment terms arrive lowercase from the dataset,
+   so tags and chips capitalise by default. Anything that is a unit or a sentence opts
+   back out — blanket-capitalising turned "60 kg" into "60 Kg" and a whole hint into
+   Title Case. The compound selectors are needed: .tag/.chip come later in this file
+   and would otherwise win on source order. */
+.nocap,.tag.nocap,.chip.nocap{text-transform:none}
+
+/* ---------------------------------------------------------------- layout -- */
+#app{
+  padding:calc(var(--sat) + 8px) var(--pad) calc(128px + var(--sab));
+  max-width:560px;margin:0 auto;
+}
+/* while the rest timer floats above the tab bar, keep its height scrollable-past
+   (the rest variant is two rows tall — ~44px more than the single-row work timer) */
+body.resting #app{padding-bottom:calc(190px + var(--sab))}
+@keyframes viewfade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+#app.vfade{animation:viewfade var(--med) var(--ease)}
+
+/* large title, the way a nav bar does it */
+.hdr{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:8px 0 16px}
+.hdr h1{font-size:34px;line-height:1.06;font-weight:600;letter-spacing:-.02em}
+.hdr .sub{color:var(--label-2);font-size:15px;letter-spacing:0;margin-top:4px}
+
+.iconbtn{
+  width:40px;height:40px;border-radius:50%;flex:none;
+  background:var(--surface);color:var(--label);
+  display:flex;align-items:center;justify-content:center;font-size:18px;
+  transition:background var(--fast),transform var(--fast);
+}
+.iconbtn:active{background:var(--surface-2);transform:scale(.92)}
+.iconbtn.on-ss{background:var(--acc-soft);color:var(--acc)}
+
+/* Section headers are the lock-screen card's eyebrow: small, bold, tracked caps in the
+   accent. Grouped-settings headers (.sect-t) take the same caps in grey instead, so a
+   settings page of twelve sections doesn't turn into twelve green shouts. */
+h4.sec{
+  font-size:15px;font-weight:600;letter-spacing:0;color:var(--label);
+  margin:24px 0 8px;padding:0 4px;line-height:1.3;
+}
+.card h2{
+  font-size:15px;font-weight:600;letter-spacing:0;color:var(--label);
+  margin:0 0 12px;line-height:1.3;
+}
+.divider{height:var(--hair);background:var(--sep);margin:16px 0;border:0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.row{display:flex;align-items:center;gap:12px}
+.row.between{justify-content:space-between}
+
+/* ----------------------------------------------------------------- card -- */
+/* The calm card: the lock-screen gradient family and its hairline edge, no glow. */
+.card{
+  background:var(--surface-grad);border-radius:var(--r-card);
+  box-shadow:inset 0 0 0 var(--hair) var(--edge);
+  padding:16px;margin-bottom:12px;
+}
+.card .big{font-family:var(--font-num);font-size:32px;font-weight:600;letter-spacing:-.01em;line-height:1.1}
+
+/* ------------------------------------------------------------ card look -- */
+/* The lock-screen card (RestTimerLiveActivity.swift → CardBackground), as CSS. Layer for
+   layer: accent 38% → 8% → clear from the top-trailing corner over 280pt; a faint 10% from
+   bottom-leading over 220pt; hairlines on a "/" diagonal 10pt apart horizontally (so
+   7.07px perpendicular — that is the pitch a repeating gradient measures) at white 3.5%;
+   the #1A1B1F → #0B0B0D fall underneath. It is always dark, so it re-states the text and
+   fill tokens for anything nested in it — buttons, tiles, the body map — in both themes. */
+.glow{
+  --glow-r:280px; --glow-r2:220px;
+  --glow-bg:
+    radial-gradient(circle var(--glow-r) at 100% 0,
+      color-mix(in srgb,var(--acc) 38%,transparent) 4px,
+      color-mix(in srgb,var(--acc) 8%,transparent) calc(var(--glow-r) / 2),
+      transparent var(--glow-r)),
+    radial-gradient(circle var(--glow-r2) at 0 100%,
+      color-mix(in srgb,var(--acc) 10%,transparent), transparent var(--glow-r2)),
+    repeating-linear-gradient(135deg,transparent 0 6.32px,var(--hatch) 6.32px 7.07px),
+    linear-gradient(180deg,var(--card-top),var(--card-bot));
+  --label:#f3eee6; --label-2:#b3ac9f; --label-3:#8f897f; --label-4:rgba(239,233,222,.22);
+  --sep:rgba(239,233,222,.10);
+  --surface:rgba(255,255,255,.07); --surface-2:rgba(255,255,255,.13); --surface-3:rgba(255,255,255,.20);
+  --surface-grad:linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.045));
+  --edge:rgba(255,255,255,.06);
+  --eyebrow:var(--acc);
+  position:relative;isolation:isolate;overflow:hidden;
+  border-radius:var(--r-glow);color:var(--label);
+  background:var(--glow-bg);
+  box-shadow:inset 0 0 0 var(--hair) var(--edge-glow);
+  padding:16px;margin-bottom:12px;
+}
+/* a small card (a stat tile) takes a proportionally smaller glow, or one corner floods it */
+.glow.sm{--glow-r:170px;--glow-r2:130px;border-radius:16px;padding:12px 16px}
+/* the bodymap paints its muscle seams in --surface; on the glow that has to be opaque */
+.glow .bodymap{--surface:#141518}
+
+/* ROUTINE ···· ▬▬▬── 12/20 · 23:14 — the card's header row */
+.glow-head{display:flex;align-items:center;gap:8px;min-height:20px;font-size:13px}
+.glow-head .who{
+  flex:1;min-width:0;display:flex;align-items:center;gap:4px;
+  font-weight:500;letter-spacing:0;color:var(--label-2);
+}
+.glow-head .who>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.glow-head .who .icn{color:var(--acc);font-size:14px}
+.glow-head .capsule{width:44px;flex:none}
+.glow-head .cnt{font-family:var(--font-num);font-weight:600;color:rgba(255,255,255,.9);flex:none}
+.glow-head .sep{font-weight:600;color:rgba(255,255,255,.35);flex:none}
+.glow-head .clk{font-family:var(--font-num);font-weight:500;color:rgba(255,255,255,.6);flex:none;min-width:38px;text-align:right}
+
+/* the card's body: what to do on the left, the one number that matters on the right */
+.glow-body{display:flex;align-items:center;gap:12px;margin-top:8px}
+.glow-body .info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.glow-title{
+  font-size:20px;font-weight:600;letter-spacing:-.005em;line-height:1.2;color:var(--label);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:capitalize;
+}
+.glow-detail{
+  font-family:var(--font-num);font-size:16px;font-weight:600;color:var(--acc);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.glow-foot{font-size:13px;font-weight:400;color:var(--label-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.glow-hero{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:none}
+.glow-hero>.icn{font-size:38px;color:var(--acc);--icon-stroke:1.9}
+
+/* a primary pill as the card draws it: accent falling to 82% */
+.glow-pill{
+  display:inline-flex;align-items:center;justify-content:center;gap:5px;flex:none;
+  min-height:40px;padding:0 16px;border-radius:10px;font-size:15px;font-weight:600;
+  background:var(--acc);box-shadow:inset 0 1px 0 rgba(255,255,255,.18);
+  color:var(--on-acc);
+}
+.glow-pill.quiet{background:rgba(255,255,255,.13);color:var(--label);box-shadow:inset 0 0 0 var(--hair) rgba(255,255,255,.08)}
+.glow-pill .icn{font-size:16px;--icon-stroke:2}
+
+/* EYEBROW — 10–11px, bold, tracked caps in the accent, often with a glyph */
+.eyebrow{
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:13px;font-weight:600;letter-spacing:0;
+  color:var(--eyebrow);line-height:1.25;
+}
+.eyebrow .icn{font-size:14px;--icon-stroke:2}
+
+/* rounded tabular digits; .hero-num is the card's 32–38pt hero value */
+.num-r{font-family:var(--font-num);font-variant-numeric:tabular-nums}
+.hero-num{
+  font-family:var(--font-num);font-variant-numeric:tabular-nums;
+  font-size:36px;font-weight:600;letter-spacing:-.01em;line-height:1;color:var(--label);
+}
+.hero-num small{font-size:18px;font-weight:600;color:color-mix(in srgb,var(--label) 45%,transparent);letter-spacing:0;margin-left:1px}
+
+/* CAPSULE — the card's MiniBar: white 16% track, accent 75% → accent fill */
+.capsule,.wprog,#timer .bar,.mrow .bar{
+  display:block;height:4px;border-radius:99px;overflow:hidden;
+  background:color-mix(in srgb,var(--label) 16%,transparent);
+}
+.capsule>i,.wprog>i,#timer .bar>i,.mrow .bar>i{
+  display:block;height:100%;border-radius:99px;
+  background:var(--acc);
+}
+.capsule>i{transition:width var(--med) var(--ease)}
+
+/* ------------------------------------------------------ inset group list -- */
+.sect{margin-bottom:24px}
+.sect-t{
+  font-size:13px;font-weight:500;color:var(--label-2);
+  letter-spacing:0;padding:0 4px 8px;display:block;line-height:1.3;
+}
+.sect-b{background:var(--surface-grad);border-radius:var(--r-card);overflow:hidden;box-shadow:inset 0 0 0 var(--hair) var(--edge)}
+.sect-f{font-size:13px;color:var(--label-2);padding:8px 4px 0;line-height:1.38}
+
+.lrow{
+  display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+  padding:12px 16px;min-height:48px;position:relative;color:var(--label);
+  background:none;
+}
+/* hairline starts after the icon rail so the list reads as one object */
+.lrow+.lrow::before{
+  content:'';position:absolute;left:16px;right:0;top:0;height:var(--hair);background:var(--sep);
+}
+.lrow:has(.lrow-i)+.lrow:has(.lrow-i)::before{left:56px}
+.lrow.tap:active{background:var(--surface-2)}
+.lrow-i{
+  width:28px;height:28px;border-radius:8px;flex:none;font-size:18px;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--surface-2);color:var(--label-2);
+}
+.lrow-m{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.lrow-t{font-size:17px;letter-spacing:0;line-height:1.25}
+.lrow-s{font-size:13px;color:var(--label-2);line-height:1.3}
+/* flex:none would let a long value ("Follow the routine (Linear progression)") run straight
+   through the title next to it, since the title's column is already free to shrink to nothing.
+   Letting the value shrink and ellipsise instead keeps the two out of each other's way. */
+.lrow-v{color:var(--label-2);font-size:17px;letter-spacing:0;flex:0 1 auto;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
+.lrow-c{color:var(--label);font-size:15px;flex:none;--icon-stroke:2.4}
+.lrow-k{color:var(--acc);font-size:17px;flex:none;--icon-stroke:2.4}
+.lrow.danger,.lrow.danger .lrow-t{color:var(--red)}
+/* an (i) before a row's control: painted small and dim so the control stays the loud thing,
+   but with a finger-sized target like everything else — the padding is the hit area and the
+   vertical negative margin keeps it from making the row taller. The horizontal ones pull the
+   hit area back under the row's own 12px gap instead of adding to it. */
+.helpbtn{
+  color:var(--label-3);font-size:16px;background:none;line-height:0;flex:none;
+  margin:-11px -2px -11px -4px;padding:11px 4px;
+}
+.helpbtn:active{color:var(--label)}
+
+/* -------------------------------------------------------------- buttons -- */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;
+  min-height:48px;padding:12px 20px;border-radius:var(--r);font-size:17px;font-weight:600;
+  letter-spacing:0;background:var(--surface-2);color:var(--label);
+  transition:transform var(--fast) var(--ease),background var(--fast),opacity var(--fast);
+}
+.btn .icn{font-size:19px}
+.btn:active{transform:scale(.975)}
+.btn.primary{background:var(--acc);color:var(--on-acc);box-shadow:inset 0 1px 0 rgba(255,255,255,.18)}
+.btn.primary:active{background:var(--acc-2)}
+.btn.tinted{background:var(--acc-soft);color:var(--acc)}
+.btn.danger{background:color-mix(in srgb,var(--red) 15%,transparent);color:var(--red)}
+.btn.ghost,.btn.plain{background:none;color:var(--acc);font-weight:400}
+.btn.gray{background:var(--surface-2);color:var(--label)}
+.btn.outline{background:none;color:var(--label-2);box-shadow:inset 0 0 0 1px var(--sep);font-weight:500}
+.btn.grow{flex:1}
+/* live workout: the trainer button under the exercise name, and Prev · Skip · Next */
+.ex-acts{display:flex;gap:8px;margin:4px 0 12px}
+.ex-acts .btn.sm{flex:1;padding:8px 16px}
+.wk-nav{display:flex;gap:8px}
+.wk-nav .btn{width:auto;padding-left:16px;padding-right:16px}
+.wk-nav .btn.wk-next{flex:1}
+.btn.ghost:active,.btn.plain:active{background:var(--surface-2)}
+.btn.sm{min-height:40px;padding:8px 16px;width:auto;font-size:15px;border-radius:var(--r-sm);gap:4px}
+.btn.sm .icn{font-size:16px}
+.btn.xs{min-height:32px;padding:4px 12px;width:auto;font-size:13px;border-radius:6px;gap:4px}
+.btn:disabled{opacity:.32;pointer-events:none}
+
+/* ----------------------------------------------------------- tab bar ----- */
+#tabbar{
+  position:fixed;left:0;right:0;bottom:0;z-index:50;
+  display:flex;justify-content:space-around;align-items:flex-end;
+  padding:8px 4px calc(4px + var(--sab));
+  /* the card's own fall, #1A1B1F → #0B0B0D, kept translucent so the blur still reads */
+  background:linear-gradient(180deg,
+    color-mix(in srgb,var(--card-top) 80%,transparent),
+    color-mix(in srgb,var(--card-bot) 90%,transparent));
+  backdrop-filter:saturate(180%) blur(24px);-webkit-backdrop-filter:saturate(180%) blur(24px);
+  border-top:var(--hair) solid var(--sep);
+}
+:root[data-theme="light"] #tabbar{background:rgba(250,248,244,.8);border-top-color:var(--sep-op)}
+#tabbar button{
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
+  color:var(--label-3);font-size:11px;font-weight:500;letter-spacing:0;padding-top:4px;
+  transition:color var(--fast);
+}
+/* The inactive tint is semi-transparent, so wherever two strokes cross inside an
+   icon (the calendar's hangers over its frame, the divider's caps on its sides)
+   the alpha doubled up and the icon read as a stack of loose layers. Carrying the
+   fade on the <svg> instead of in the stroke colour flattens the icon first and
+   fades it as one shape — and it does that for every icon, not just this one. */
+#tabbar button .icn{font-size:25px;--icon-stroke:1.65;color:var(--label)}
+#tabbar button.on{color:var(--acc)}
+#tabbar button.on .icn{--icon-stroke:2;color:inherit;opacity:1}
+#tabbar button.start{margin-top:-24px}
+#tabbar button.start .cir{
+  width:52px;height:52px;border-radius:50%;color:var(--on-acc);
+  background:var(--acc);
+  display:flex;align-items:center;justify-content:center;position:relative;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 6px 16px -6px rgba(0,0,0,.6);
+  transition:transform var(--fast) var(--ease);
+}
+#tabbar button.start:active .cir{transform:scale(.93)}
+#tabbar button.start .cir .icn{font-size:26px;--icon-stroke:2;color:inherit;opacity:1}
+#tabbar button.start span{color:var(--acc);font-weight:600}
+/* `.cir` is itself a <span>, so the label rules above and below reach it too and
+   outrank the `.cir` block — which is how the running state ended up painting an
+   orange play glyph onto an orange disc. Both states restate their own colour.
+   The disc is orange in either theme, so its glyph is black, not `--on-acc`. */
+#tabbar button.start .cir{color:var(--on-acc)}
+#tabbar button.start.rec .cir{background:var(--orange);color:#000;box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 6px 16px -6px rgba(0,0,0,.6)}
+#tabbar button.start.rec span{color:var(--orange)}
+#tabbar button.start.rec .cir::after{
+  content:'';position:absolute;inset:0;border-radius:50%;
+  border:2px solid var(--orange);animation:ping 1.9s var(--ease) infinite;
+}
+@keyframes ping{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.45);opacity:0}}
+
+/* ------------------------------------------------------------ week strip -- */
+.week{display:flex;justify-content:space-between;gap:4px}
+.wday{
+  flex:1;text-align:center;padding:8px 2px;border-radius:10px;
+  background:none;border:none;transition:background var(--fast);
+}
+.wday .lbl{font-size:12px;color:var(--label-3);font-weight:500;letter-spacing:0}
+.wday .num{font-size:17px;font-weight:400;margin:4px 0;letter-spacing:0;font-family:var(--font-num)}
+.wday .dot{width:5px;height:5px;border-radius:50%;background:transparent;margin:0 auto}
+.wday .dot.plan{background:var(--label-3)}
+.wday .dot.ovr{background:var(--orange)}
+.wday .dot.done{background:var(--acc)}
+.wday:active{background:var(--surface-2)}
+.wday.today .num{
+  background:var(--acc);color:var(--on-acc);font-weight:600;
+  width:32px;height:32px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;margin:2px auto;
+}
+
+/* ----------------------------------------------------------------- list -- */
+.list{display:flex;flex-direction:column;gap:8px}
+.item{
+  display:flex;align-items:center;gap:12px;background:var(--surface-grad);
+  box-shadow:inset 0 0 0 var(--hair) var(--edge);
+  border-radius:var(--r-card);padding:8px 12px;min-height:64px;
+  transition:background var(--fast);text-align:left;width:100%;
+}
+.item:active{background:var(--surface-2)}
+.thumb{width:48px;height:48px;border-radius:8px;object-fit:cover;background:#fff;flex:none}
+.thumb-x{
+  display:flex;align-items:center;justify-content:center;font-size:20px;
+  background:var(--surface-2);color:var(--label-2);
+}
+.item .tt{font-size:17px;font-weight:400;line-height:1.25;letter-spacing:0}
+.item .ss{color:var(--label-2);font-size:13px;margin-top:2px}
+.item .grow{flex:1;min-width:0}
+.chev{color:var(--label);flex:none;font-size:15px;--icon-stroke:2.4}
+.tag{
+  display:inline-flex;align-items:center;gap:4px;background:var(--surface-2);
+  color:var(--label-2);border-radius:6px;padding:2px 8px;font-size:12px;
+  font-weight:500;text-transform:capitalize;
+}
+.tag.acc{background:var(--acc-soft);color:var(--acc)}
+
+/* ---------------------------------------------------------------- chips -- */
+.chips{
+  display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch;
+}
+.chips::-webkit-scrollbar{display:none}
+.chip{
+  flex:none;min-height:36px;padding:8px 16px;border-radius:18px;background:var(--surface);
+  font-size:15px;font-weight:400;color:var(--label);text-transform:capitalize;
+  letter-spacing:0;transition:background var(--fast),color var(--fast);
+}
+.chip:active{background:var(--surface-2)}
+.chip.on{background:var(--acc);color:var(--on-acc);font-weight:500}
+
+/* =========================== CONTROLS ==================================== */
+
+/* --- text field --- */
+.field,.input{
+  width:100%;background:var(--surface);border:none;border-radius:var(--r);
+  padding:12px 16px;font-size:17px;letter-spacing:0;outline:none;
+  transition:box-shadow var(--fast);
+}
+.field::placeholder,.input::placeholder{color:var(--label-3)}
+.field:focus,.input:focus{box-shadow:inset 0 0 0 2px var(--acc)}
+.field.area,textarea.input{min-height:92px;resize:vertical;line-height:1.42}
+.exnote{
+  background:var(--surface);border-radius:var(--r);padding:12px 16px;
+  line-height:1.45;white-space:pre-wrap;font-size:15px;margin-bottom:10px;color:var(--label-2);
+}
+
+/* --- search field --- */
+.searchf{position:relative;display:flex;align-items:center}
+.searchf .lead{
+  position:absolute;left:11px;font-size:16px;color:var(--label-3);
+  pointer-events:none;--icon-stroke:2.1;z-index:1;
+}
+.searchf .field{padding-left:35px;padding-right:36px;background:var(--surface-2);border-radius:10px}
+:root[data-theme="light"] .searchf .field{background:rgba(118,118,128,.12)}
+.searchf .clear{
+  position:absolute;right:8px;width:22px;height:22px;border-radius:50%;
+  background:var(--label-3);color:var(--bg);display:flex;align-items:center;
+  justify-content:center;font-size:11px;--icon-stroke:3;
+}
+/* legacy .search wrapper */
+.search{position:relative}
+.search .input{padding-left:35px;background:var(--surface-2);border-radius:10px}
+:root[data-theme="light"] .search .input{background:rgba(118,118,128,.12)}
+.search>svg{
+  position:absolute;left:11px;top:50%;transform:translateY(-50%);z-index:1;
+  width:16px;height:16px;stroke:var(--label-3);fill:none;stroke-width:2.1;stroke-linecap:round;
+}
+
+/* --- switch --- */
+.sw{
+  width:51px;height:31px;border-radius:99px;background:var(--surface-3);
+  flex:none;padding:2px;display:flex;align-items:center;
+  transition:background var(--med) var(--ease);
+}
+.sw .knob{
+  width:27px;height:27px;border-radius:50%;background:#fff;
+  box-shadow:0 3px 8px rgba(0,0,0,.15),0 1px 1px rgba(0,0,0,.16);
+  transition:transform var(--med) var(--ease),width var(--fast) var(--ease);
+}
+.sw.on{background:var(--acc)}
+.sw.on .knob{transform:translateX(20px)}
+.sw:active .knob{width:31px}
+.sw.on:active .knob{transform:translateX(16px)}
+.sw:disabled{opacity:.4}
+
+/* --- segmented control --- */
+/* flex, not grid: an absolutely-positioned child of a GRID container is placed
+   into a grid area, so the sliding thumb resolved top/bottom against the wrong
+   box and overflowed the track. A flex container leaves abspos children on the
+   padding box, which is what the thumb needs. */
+.seg{
+  position:relative;display:flex;
+  background:var(--surface-3);border-radius:10px;padding:2px;isolation:isolate;
+}
+.seg>button{flex:1 1 0;min-width:0}
+:root[data-theme="light"] .seg{background:rgba(118,118,128,.12)}
+.seg-sel{
+  position:absolute;z-index:0;top:2px;bottom:2px;left:2px;
+  width:calc((100% - 4px)/var(--n));
+  transform:translateX(calc(100% * var(--i)));
+  background:var(--surface);border-radius:8px;
+  box-shadow:0 3px 8px rgba(0,0,0,.12),0 1px 1px rgba(0,0,0,.06);
+  transition:transform var(--med) var(--ease);
+}
+:root[data-theme="light"] .seg-sel{background:#fff}
+.seg button{
+  position:relative;z-index:1;padding:6px 8px;font-size:15px;font-weight:500;
+  letter-spacing:0;color:var(--label);display:flex;align-items:center;
+  justify-content:center;gap:4px;min-height:36px;transition:opacity var(--fast);
+}
+.seg button .icn{font-size:16px}
+.seg button:not(.on){color:var(--label-2);font-weight:400}
+.seg button:active{opacity:.5}
+/* sitting in a list row: shrink to content instead of filling the row */
+.seg-inline{flex:none;min-width:132px}
+.seg-range{margin-bottom:10px}
+.seg-inline button{padding:4px 12px;font-size:13px;min-height:32px}
+.seg-inline button .icn{font-size:14px}
+
+/* native time input, restyled to sit in a row like a value label */
+.timef{
+  background:var(--surface-2);border:none;border-radius:8px;padding:6px 10px;
+  font-size:16px;color:var(--label);outline:none;font-variant-numeric:tabular-nums;
+}
+.timef::-webkit-calendar-picker-indicator{filter:invert(.5)}
+:root[data-theme="light"] .timef::-webkit-calendar-picker-indicator{filter:none}
+
+/* --- stepper --- */
+.stp-w{display:flex;flex-direction:column;gap:8px;min-width:0}
+.stp-l{font-size:13px;color:var(--label-2);text-align:center}
+.stp{
+  display:flex;align-items:center;background:var(--surface-2);
+  border-radius:10px;overflow:hidden;min-width:0;
+}
+.stp button{
+  width:40px;height:44px;flex:none;color:var(--label);font-size:16px;
+  display:flex;align-items:center;justify-content:center;
+  transition:background var(--fast);--icon-stroke:2.2;
+}
+.stp button:active{background:var(--surface-3)}
+.stp .val{
+  flex:1;min-width:0;display:flex;align-items:baseline;justify-content:center;gap:3px;padding:0 2px;
+}
+.stp .val i{font-style:normal;font-size:12px;color:var(--label-2);flex:none}
+.stp .num{
+  width:100%;min-width:0;text-align:center;background:none;border:none;outline:none;
+  font-family:var(--font-num);font-size:18px;font-weight:600;letter-spacing:0;padding:0;
+  font-variant-numeric:tabular-nums;-moz-appearance:textfield;appearance:textfield;
+}
+.stp .num::-webkit-inner-spin-button{display:none}
+
+/* --- slider --- */
+.sld{position:relative;height:32px;display:flex;align-items:center;cursor:pointer;touch-action:none}
+.sld-track{
+  position:absolute;left:0;right:0;height:6px;border-radius:99px;
+  background:var(--surface-3);overflow:hidden;
+}
+.sld-fill{display:block;height:100%;background:var(--acc);border-radius:99px}
+.sld-knob{
+  position:absolute;width:26px;height:26px;border-radius:50%;background:#fff;
+  transform:translateX(-50%);
+  box-shadow:0 4px 10px rgba(0,0,0,.22),0 1px 2px rgba(0,0,0,.16);
+  transition:transform var(--fast) var(--ease);
+}
+.sld.dragging .sld-knob{transform:translateX(-50%) scale(1.14)}
+
+/* --- checkbox --- */
+/* The most-tapped control in the app, and it was a 30px circle: chalky thumbs miss, and a miss
+   on an already-ticked set silently UN-logs it. The visual stays modest (36px) so the three
+   steppers beside it keep their width on a narrow phone; an invisible ::after carries the
+   target the rest of the way to Apple's 44px, spilling only 4px into an 8px gap. */
+.chk,.ck{
+  width:36px;height:36px;border-radius:50%;flex:none;position:relative;
+  display:flex;align-items:center;justify-content:center;
+  background:none;box-shadow:inset 0 0 0 1.8px var(--label-4);color:transparent;
+  transition:background var(--fast),box-shadow var(--fast),color var(--fast),transform var(--fast);
+}
+.chk::after,.ck::after{content:'';position:absolute;top:-4px;right:-4px;bottom:-4px;left:-4px;border-radius:50%}
+.chk .icn{font-size:19px;--icon-stroke:2.6}
+.chk.on{background:var(--acc);box-shadow:none;color:var(--on-acc)}
+.chk:active,.ck:active{transform:scale(.9)}
+.ck svg{
+  width:19px;height:19px;stroke:transparent;fill:none;stroke-width:2.6;
+  stroke-linecap:round;stroke-linejoin:round;transition:stroke var(--fast);
+}
+.ck.on{background:var(--acc);box-shadow:none}
+.ck.on svg{stroke:var(--on-acc)}
+
+/* ------------------------------------------------------------- workout --- */
+.wprog{margin-bottom:16px}
+.wprog i{transition:width var(--med) var(--ease)}
+/* The animations are drawn on white, so the panel has to be white or they float on a halo.
+   At night that is a 320px lightbulb in a dark app, held at arm's length in a dim garage — so
+   in dark mode the whole panel is dimmed instead of recoloured, which keeps the figure legible
+   without the glare. Light theme puts it back to true white below. */
+.exmedia{position:relative;border-radius:var(--r-lg);overflow:hidden;background:#d9d9de;margin-bottom:12px}
+.exmedia img{width:100%;height:320px;object-fit:contain;display:block;filter:brightness(.86) contrast(1.03)}
+:root[data-theme="light"] .exmedia{background:#fff}
+:root[data-theme="light"] .exmedia img{filter:none}
+.exmedia .gifhint,.exmedia .giftoggle{
+  position:absolute;bottom:8px;display:inline-flex;align-items:center;gap:4px;
+  background:rgba(0,0,0,.45);color:#fff;border-radius:16px;min-height:32px;padding:4px 12px;
+  font-size:12px;font-weight:500;
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+}
+.exmedia .gifhint{right:8px}
+.exmedia .giftoggle{left:8px}
+.exmedia .gifhint .icn,.exmedia .giftoggle .icn{font-size:13px}
+/* superset: both exercises are on screen together, so the animations have to give way —
+   at 180px you had to scroll a full screen between two exercises done back-to-back */
+.exmedia.compact img{height:120px}
+.exmedia.mini img{height:84px}
+/* Nothing to show: the animation and the still frame both failed to arrive. Sized to match the
+   image it stands in for so the card doesn't jump, and deliberately not a broken-image glyph. */
+.exmedia-x{display:flex;align-items:center;justify-content:center;width:100%;height:320px;font-size:46px;color:#8e8e96}
+.exmedia.compact .exmedia-x{height:120px;font-size:30px}
+.exmedia.mini .exmedia-x{height:84px;font-size:24px}
+
+.sethead{
+  display:flex;align-items:center;gap:8px;padding:0 0 4px;
+  font-size:12px;color:var(--label-3);font-weight:500;letter-spacing:0;
+}
+.sethead .n-sp{width:24px;flex:none}
+.sethead .w-sp{flex:1.4;text-align:center}
+.sethead .r-sp{flex:1;text-align:center}
+.sethead .eff-sp{text-align:center}
+.sethead .ck-sp{width:30px;flex:none}
+.setrow{display:flex;align-items:center;gap:8px;padding:8px 0;position:relative}
+/* the separator moved to the wrapper when the recorded-rest caption was added below each row */
+.setwrap+.setwrap .setrow::before{
+  content:'';position:absolute;left:32px;right:0;top:0;height:var(--hair);background:var(--sep);
+}
+/* What the session recorded without being asked — no tap, no input, just what happened. */
+.settime{
+  display:flex;align-items:center;gap:4px;margin:-4px 0 4px 32px;
+  font-size:12px;color:var(--label-3);font-variant-numeric:tabular-nums;
+}
+.settime .icn{font-size:11px}
+.setrow .n{
+  width:24px;height:24px;border-radius:50%;background:var(--surface-2);color:var(--label-2);
+  display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex:none;
+  font-family:var(--font-num);font-variant-numeric:tabular-nums;
+  transition:background var(--fast),color var(--fast);
+}
+.setrow .stp.w{flex:1.4;min-width:0}
+.setrow .stp.r{flex:1;min-width:0}
+.setrow .stp.eff{flex:1.1;min-width:0}
+.setrow .stp button{width:32px;height:44px}
+/* a 3rd stepper (RIR) needs narrower buttons and a tighter row gap to fit next to weight+reps
+   on narrow phones, same technique as the exercise-config sheet's three-steppers-in-a-row
+   (.cfgrow below) — RIR's own value is short ("1.5") so its buttons shrink the most, weight/reps
+   just enough to make room since their values ("82.5", "12") need more of what's left.
+   The header shares the numbers so its labels stay centred over the steppers they name. */
+.setrow.eff3,.sethead.eff3{gap:6px}
+.setrow.eff3 .stp.w,.sethead.eff3 .w-sp{flex:1.2}
+.setrow.eff3 .stp.r,.sethead.eff3 .r-sp{flex:1}
+.setrow.eff3 .stp.eff,.sethead.eff3 .eff-sp{flex:.85}
+.setrow.eff3 .stp button{width:23px}
+.setrow.eff3 .stp.eff button{width:20px}
+.setrow.eff3 .stp .num{font-size:14px}
+.setrow.done .n{background:var(--acc);color:var(--on-acc)}
+.setwrap.done .setrow{opacity:.45}
+/* the set that is up now: in a superset this is how you see whose turn it is */
+.setwrap.up .setrow{background:var(--acc-soft);border-radius:12px;margin:0 -8px;padding-left:8px;padding-right:8px}
+.setwrap.up .setrow .n{background:var(--acc);color:var(--on-acc)}
+/* why the next target is what it is (issue #17) */
+.progline{
+  display:flex;align-items:flex-start;gap:8px;margin:8px 0 4px;
+  font-size:13px;line-height:1.38;color:var(--acc);
+}
+.progline.warn{color:var(--yellow)}
+.progline svg{flex:none;margin-top:2px}
+
+/* a note you wrote about this exercise. Today's shows plain; the last one you wrote shows
+   dimmed with its date, so you can tell a fresh observation from an old one at a glance.
+   It's a button, not a div — the whole line opens the editor, which is a bigger target than
+   the pencil in the header and it's what you'll reach for mid-set. */
+.noteline{
+  display:flex;align-items:flex-start;gap:8px;margin:8px 0 4px;width:100%;
+  font-size:13px;line-height:1.38;color:var(--label-2);text-align:left;
+  background:none;border:0;padding:0;
+}
+.noteline svg{flex:none;margin-top:2px;color:var(--label-3)}
+.noteline.old{color:var(--label-3)}
+.noteline em{font-style:normal;color:var(--label-3);flex:none;margin-left:2px}
+
+/* start a timed set (issue #16) — sits where you'd otherwise reach for the checkbox */
+.setrow .setgo{
+  width:36px;height:36px;border-radius:50%;flex:none;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--surface-2);color:var(--acc);font-size:16px;
+  transition:background var(--fast),opacity var(--fast);
+}
+.setrow .setgo:disabled{opacity:.3;cursor:default}
+.setrow .setgo:not(:disabled):active{background:var(--surface-3)}
+/* exercise-config sheet: three steppers side by side on narrow phones */
+.cfgrow{gap:8px}
+.cfgrow>div{flex:1;min-width:0}
+.cfgrow .stp button{width:30px}
+.cfgrow .stp-l{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* --- rest timer --- */
+/* The lock-screen card's rest and work faces, floating above the tab bar. It wears the
+   full .glow (opaque, so the set rows underneath can never read through the clock — the
+   reason the old bar was pushed to 97%). The id rules below outrank .glow on position,
+   radius and shadow, so the glow's inset edge is re-stated beside the drop shadow. */
+#timer{
+  position:fixed;left:12px;right:12px;bottom:calc(88px + var(--sab));z-index:60;margin:0;
+  border-radius:var(--r-glow);padding:12px 16px;
+  display:flex;align-items:center;gap:12px;
+  box-shadow:inset 0 0 0 var(--hair) var(--edge-glow),0 14px 36px -8px rgba(0,0,0,.6);
+}
+#timer .t{
+  font-family:var(--font-num);font-size:32px;font-weight:600;letter-spacing:0;
+  font-variant-numeric:tabular-nums;min-width:72px;color:var(--label);line-height:1;
+}
+#timer .bar{flex:1}
+#timer .bar i{transition:width 1s linear}
+#timer .eyebrow{margin-bottom:4px}
+/* rest variant: −15/+15/Skip and the clock won't share one line on a phone, so the clock and
+   bar take the top row and the controls take their own. The work timer keeps a single row —
+   it only ever has two buttons. */
+/* Compact (2026-10-20, "takes up too much screen"): what's next and the bar on top, the clock
+   sharing the button row, so the whole thing is about two thirds of its old height. */
+#timer.rest{flex-direction:column;align-items:stretch;gap:8px;padding:12px}
+/* Read from across the garage with the phone propped up, not held: 26px was a squint. The
+   line underneath says what the rest is for, so the bar can be loaded without a tap. */
+#timer.rest .t{font-size:40px;line-height:1;min-width:0;margin-right:auto}
+#timer.rest .next{
+  font-size:15px;font-weight:500;color:var(--label);margin-bottom:8px;display:flex;align-items:center;gap:4px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:capitalize;
+}
+#timer.rest .acts{display:flex;align-items:center;gap:8px}
+#timer.rest .acts .btn{min-height:44px;padding:8px 12px}   /* still a thumb's worth, mid-set */
+#timer.rest .acts .skip{min-width:72px}
+/* work timer (issue #16): the same bar doing the opposite job — outlined and tinted so a
+   glance tells "you are holding this" apart from "you are recovering". */
+#timer.working{box-shadow:inset 0 0 0 1px var(--acc-line),0 14px 36px -8px rgba(0,0,0,.6)}
+#timer.working .t{color:var(--acc)}
+#timer.working .grow{flex:1;min-width:0}
+#timer.working .lbl{
+  font-size:13px;color:var(--label-2);margin-bottom:4px;text-transform:capitalize;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+
+/* ---------------------------------------------------------------- modal -- */
+#modal-root{position:fixed;inset:0;z-index:100;display:none}
+#modal-root.open{display:block}
+.mback{
+  position:absolute;inset:0;background:rgba(0,0,0,.4);
+  backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);
+  touch-action:none;overscroll-behavior:none;
+}
+.sheet{
+  position:absolute;left:0;right:0;bottom:var(--kb);background:var(--sheet-grad),var(--bg-el);
+  box-shadow:inset 0 var(--hair) 0 rgba(255,255,255,.08);
+  border-radius:var(--r-xl) var(--r-xl) 0 0;
+  padding:8px 20px calc(20px + var(--sab));
+  /* sit on top of the keyboard rather than under it, and give up the height it took so the
+     sheet's own scroll can still reach the bottom of a long form */
+  max-height:calc(90vh - var(--kb));overflow-y:auto;-webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;touch-action:pan-y;will-change:transform;
+}
+:root[data-theme="light"] .sheet{background:var(--bg);box-shadow:none}
+.sheet .grab{width:36px;height:4px;border-radius:2px;background:var(--label-4);margin:4px auto 16px}
+.sheet h3{font-size:20px;font-weight:600;letter-spacing:0;margin-bottom:16px}
+.center{
+  position:absolute;left:50%;top:calc(50% - var(--kb) / 2);transform:translate(-50%,-50%);
+  width:min(84vw,300px);background:var(--sheet-grad),var(--bg-el);border-radius:var(--r-glow);padding:20px;
+  box-shadow:0 20px 60px -12px rgba(0,0,0,.5);
+}
+:root[data-theme="light"] .center{background:#fff}
+/* A dialog whose whole content is a glow card (the finish summary, "that's everything")
+   lets the card fill it edge to edge, in either theme. */
+:root .center:has(> .glow-fill){background:transparent;padding:0}
+.glow.glow-fill{margin:0;border-radius:inherit;padding:20px}
+.glow-fill h3{color:var(--label)}
+.finsum-tiles .tile{padding:12px}
+.finsum-tiles .tile .l{font-size:13px;font-weight:500;letter-spacing:0;color:var(--label-2)}
+.finsum-tiles .tile .v{font-size:22px;font-weight:600;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* --- RIR/RPE conversion table (effort help sheet) ---
+   The two scales only click when you see them side by side, so the numbers get fixed-width
+   tabular columns you can read straight down, and the words take whatever is left. Built out
+   of the same grouped-list parts as the rest of the app (surface fill, inset hairlines) rather
+   than a real <table>, so it inherits the card look and wraps properly on a narrow phone. */
+.efftbl{background:var(--surface-grad);box-shadow:inset 0 0 0 var(--hair) var(--edge);border-radius:var(--r-lg);overflow:hidden;margin:14px 0 12px}
+.efftbl .r{display:flex;align-items:center;gap:10px;padding:10px 14px;position:relative}
+.efftbl .r+.r::before{
+  content:'';position:absolute;left:14px;right:0;top:0;height:var(--hair);background:var(--sep);
+}
+.efftbl .n{
+  width:36px;flex:none;text-align:center;font-size:17px;font-weight:600;
+  letter-spacing:0;font-variant-numeric:tabular-nums;font-family:var(--font-num);
+}
+.efftbl .f{flex:1;min-width:0;font-size:15px;color:var(--label-2);line-height:1.3}
+/* the header names the columns without competing with them */
+.efftbl .hd{background:var(--surface-2);padding-top:8px;padding-bottom:8px}
+.efftbl .hd .n,.efftbl .hd .f{
+  font-size:12px;font-weight:500;letter-spacing:0;
+  color:var(--label-3);
+}
+/* the row a working set usually lands on — the anchor the others are read against */
+.efftbl .r.on{background:var(--acc-soft)}
+.efftbl .r.on .n{color:var(--acc)}
+.efftbl .r.on .f{color:var(--label)}
+
+/* --- glyph picker (replaces the emoji grid) --- */
+.glyph-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.glyph-cell{
+  aspect-ratio:1;border-radius:12px;background:var(--surface);
+  display:flex;align-items:center;justify-content:center;font-size:24px;
+  color:var(--label);transition:background var(--fast),color var(--fast),transform var(--fast);
+}
+.glyph-cell:active{transform:scale(.92)}
+.glyph-cell.on{background:var(--acc);color:var(--on-acc)}
+
+/* --- big weight readout --- */
+.bwstep{display:flex;align-items:center;justify-content:center;gap:16px;margin:16px 0 8px}
+.bw-pm{
+  width:48px;height:48px;border-radius:50%;background:var(--surface);flex:none;
+  color:var(--label);display:flex;align-items:center;justify-content:center;font-size:19px;
+  transition:background var(--fast),transform var(--fast);--icon-stroke:2.2;
+}
+.bw-pm:active{background:var(--surface-2);transform:scale(.92)}
+.bw-read{
+  font-family:var(--font-num);font-size:52px;font-weight:600;letter-spacing:-.02em;min-width:160px;text-align:center;
+  font-variant-numeric:tabular-nums;line-height:1;
+}
+.bw-read .u{font-size:20px;color:var(--label-2);font-weight:400;letter-spacing:0}
+.bwin{display:flex;align-items:baseline;justify-content:center;gap:8px;margin:16px 0}
+.bwin input{
+  width:150px;background:none;border:none;outline:none;text-align:right;
+  font-family:var(--font-num);font-size:52px;font-weight:600;letter-spacing:-.02em;color:var(--label);font-variant-numeric:tabular-nums;
+}
+.bwin span{color:var(--label-2);font-size:19px}
+
+/* --------------------------------------------------------------- charts -- */
+.chart{width:100%;overflow:hidden}
+.chart svg{display:block;width:100%;height:auto}
+/* pan-y and not none: the vertical axis stays the page's, so a flick that starts on a
+   chart still scrolls the view it sits in — a full-width chart that swallowed scroll
+   would be worse than the lag this was meant to fix. Horizontal is ours, which is the
+   axis a scrub actually travels on, and WebKit hands those moves straight to us without
+   competing. A gesture WebKit does claim as a scroll arrives as pointercancel, and
+   LineChart hides the crosshair on it rather than leaving it stranded. */
+.chart-i{position:relative;touch-action:pan-y}
+/* The label is moved by transform, from its own measured size, so it can never be pushed
+   under the `.chart` clip at either edge — hence no offset here. left/top stay at 0 as the
+   origin that transform counts from. */
+.ctip{
+  position:absolute;left:0;top:0;background:var(--surface-2);
+  border-radius:8px;padding:4px 8px;font-size:13px;font-weight:500;white-space:nowrap;font-variant-numeric:tabular-nums;
+  max-width:calc(100% - 8px);overflow:hidden;text-overflow:ellipsis;
+  pointer-events:none;box-shadow:0 6px 18px -4px rgba(0,0,0,.4);
+}
+
+/* --- activity heatmap --- */
+.hm-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px}
+.hm-wrap::-webkit-scrollbar{display:none}
+.hm-months{display:flex;margin-left:28px;margin-bottom:5px}
+.hm-months span{flex:none;width:14px;font-size:11px;color:var(--label-3);white-space:nowrap;overflow:visible}
+.hm-body{display:flex}
+.hm-days{display:flex;flex-direction:column;gap:3px;flex:none;width:28px}
+.hm-days span{height:11px;font-size:10px;color:var(--label-2);line-height:11px}
+.hm-grid{display:flex;gap:3px}
+.hm-col{display:flex;flex-direction:column;gap:3px}
+.hm-c{width:11px;height:11px;border-radius:3px;background:var(--surface-2);flex:none}
+.hm-c.l1{background:color-mix(in srgb,var(--acc) 30%,var(--surface-2))}
+.hm-c.l2{background:color-mix(in srgb,var(--acc) 55%,var(--surface-2))}
+.hm-c.l3{background:color-mix(in srgb,var(--acc) 78%,var(--surface-2))}
+.hm-c.l4{background:var(--acc)}
+.hm-c.today{box-shadow:0 0 0 1.5px var(--acc)}
+.hm-c.future{opacity:.3}
+.hm-legend{
+  display:flex;align-items:center;gap:4px;justify-content:flex-end;margin-top:9px;
+  font-size:11px;color:var(--label-3);
+}
+.hm-legend .hm-c{width:10px;height:10px}
+
+/* --- muscle map --- */
+/* Reuses the .hm-c level ramp above, so one accent scale means one thing app-wide. */
+/* An untrained muscle is derived from the text colour rather than a fixed surface, so
+   the body keeps the same contrast in both themes — pinned to --surface-2 it was all
+   but invisible on a white card. */
+.bodymap{
+  display:flex;gap:6px;justify-content:center;align-items:flex-start;
+  --bm-base:color-mix(in srgb,var(--label) 11%,var(--surface));
+}
+.bm-v{flex:1;min-width:0;height:auto;max-height:min(46vh,340px)}
+.bm-ph{height:200px}                       /* holds the space while the geometry loads */
+.bm-sil{fill:color-mix(in srgb,var(--label) 18%,var(--surface))}
+.bm-m{fill:var(--bm-base);transition:fill var(--med) var(--ease)}
+.bm-m.l1{fill:color-mix(in srgb,var(--acc) 32%,var(--bm-base))}
+.bm-m.l2{fill:color-mix(in srgb,var(--acc) 56%,var(--bm-base))}
+.bm-m.l3{fill:color-mix(in srgb,var(--acc) 78%,var(--bm-base))}
+.bm-m.l4{fill:var(--acc)}
+.bm-m.sel{stroke:var(--label);stroke-width:7}
+.bodymap.tappable .bm-m{cursor:pointer}
+/* A hairline in the surface colour separates neighbouring muscles; the artwork has no
+   outline path of its own, so without this the body reads as one flat blob. */
+.bm-v path{stroke:var(--surface);stroke-width:2.5;stroke-linejoin:round}
+
+.mrow{display:flex;align-items:center;gap:8px;padding:4px 0}
+.mrow .nm{flex:1;min-width:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mrow .bar{width:74px;flex:none}
+.mrow .v{font-size:13px;color:var(--label-2);min-width:52px;font-variant-numeric:tabular-nums;text-align:right;flex:none}
+/* A headline number inside a card — tile weight without a tile around it, for the pair of
+   readings at the top of the effort card. */
+.stat-v{font-family:var(--font-num);font-size:28px;font-weight:600;letter-spacing:0;line-height:1.1}
+.mchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.mchip{font-size:13px;padding:4px 8px;border-radius:99px;background:var(--surface-2);color:var(--label-2)}
+.mchip.miss{background:color-mix(in srgb,var(--orange) 16%,transparent);color:var(--orange)}
+
+/* --- stat tiles --- */
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.tile{background:var(--surface-grad);border-radius:var(--r-card);padding:16px;box-shadow:inset 0 0 0 var(--hair) var(--edge)}
+.tile .l{
+  color:var(--label-2);font-size:13px;font-weight:400;letter-spacing:0;
+  text-transform:none;display:flex;align-items:center;gap:4px;
+}
+.tile .l .icn{font-size:14px;color:var(--label-2)}
+.tile .v{font-family:var(--font-num);font-size:28px;font-weight:600;letter-spacing:0;margin-top:4px;line-height:1.1}
+/* the headline tiles on Stats: glow, an eyebrow for the label, a bold rounded hero value */
+.tile.glow{margin:0}
+.tile.glow .l{font-size:13px;font-weight:500;letter-spacing:0;color:var(--label-2);gap:4px}
+.tile.glow .l .icn{font-size:14px;color:var(--acc)}
+.tile.glow .v{font-size:34px;font-weight:600;margin-top:8px;color:var(--label)}
+.tile.tappable:active{background:var(--surface-2)}
+
+/* --- PR badge --- */
+.pr{
+  display:inline-flex;align-items:center;gap:4px;
+  background:color-mix(in srgb,var(--yellow) 18%,transparent);color:var(--yellow);
+  border-radius:6px;padding:3px 8px;font-size:12px;font-weight:500;
+}
+.pr .icn{font-size:13px}
+
+/* --- toast --- */
+#toast{
+  position:fixed;left:50%;transform:translateX(-50%) translateY(6px);
+  bottom:calc(96px + var(--sab));z-index:200;
+  background:color-mix(in srgb,var(--surface-2) 88%,transparent);
+  backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);
+  border-radius:24px;padding:12px 20px;font-size:15px;font-weight:500;
+  box-shadow:0 10px 30px -6px rgba(0,0,0,.5);
+  opacity:0;pointer-events:none;transition:opacity var(--med),transform var(--med) var(--ease);
+  max-width:88vw;text-align:center;
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ---------------------------------------------------------------- misc --- */
+.empty{text-align:center;color:var(--label-2);padding:48px 20px;font-size:15px;line-height:1.45}
+.empty .ico{font-size:32px;color:var(--label-3);margin-bottom:12px;display:flex;justify-content:center}
+.steps-list{
+  padding-left:18px;color:var(--label-2);font-size:15px;line-height:1.5;
+  display:flex;flex-direction:column;gap:9px;
+}
+.steps-list::marker{color:var(--label-3)}
+
+/* --- month calendar --- */
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:12px}
+.cal-h{text-align:center;font-size:12px;color:var(--label-3);font-weight:500;padding:2px 0}
+.cal-d{
+  aspect-ratio:1;border-radius:10px;background:var(--surface);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  font-weight:400;font-size:15px;color:var(--label);transition:background var(--fast);font-family:var(--font-num);
+}
+.cal-d:active{background:var(--surface-2)}
+.cal-d.has{background:var(--acc-soft);color:var(--acc)}
+.cal-d.today{box-shadow:inset 0 0 0 1.8px var(--acc)}
+.cal-d i{width:5px;height:5px;border-radius:50%;background:transparent}
+.cal-d i.done{background:var(--acc)}
+.cal-d i.plan{background:var(--label-3)}
+.cal-d i.ovr{background:var(--orange)}
+.cal-legend{display:flex;gap:16px;justify-content:center;margin-top:12px;font-size:12px;color:var(--label-3)}
+.cal-legend i{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:4px}
+
+/* --- accent swatches --- */
+.swatches{display:flex;gap:12px;flex-wrap:wrap}
+.swatch{width:32px;height:32px;border-radius:50%;flex:none;position:relative;transition:transform var(--fast)}
+.swatch:active{transform:scale(.9)}
+.swatch.on::after{content:'';position:absolute;inset:-4px;border-radius:50%;box-shadow:0 0 0 2px var(--label)}
+
+/* --- supersets --- */
+.ss-label{
+  font-size:13px;font-weight:600;letter-spacing:0;text-transform:none;
+  color:var(--acc);margin:8px 0 4px 4px;display:flex;align-items:center;gap:4px;
+}
+.ss-label .icn{font-size:13px}
+.item.in-ss{box-shadow:inset 3px 0 0 var(--acc)}
+.ss-card{
+  border-radius:var(--r-lg);padding:16px;
+  background:var(--surface);box-shadow:inset 0 0 0 1px var(--acc-line);
+}
+.ss-hd{
+  font-size:13px;font-weight:600;color:var(--acc);margin-bottom:12px;
+  text-align:center;display:flex;align-items:center;justify-content:center;gap:4px;
+}
+.ss-ex{position:relative}
+.ss-amp{text-align:center;font-size:15px;font-weight:600;color:var(--acc);margin:16px 0 8px}
+
+/* --- home: today's session row --- */
+.today-row{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin-top:12px;padding:12px 16px;border-radius:var(--r);background:var(--surface-2);
+  transition:background var(--fast);width:100%;text-align:left;
+}
+.today-row:active{background:var(--surface-3)}
+.today-row .lbl2{font-size:13px;font-weight:500;letter-spacing:0;color:var(--label-3)}
+.today-row .ttl{
+  font-weight:500;font-size:17px;line-height:1.25;text-transform:capitalize;
+  letter-spacing:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;
+}
+/* …and as a hero: the lock-screen card for the session to do now. Press keeps the .97 scale
+   from _motion.css; this restates the glow so the press tint there doesn't flatten it. */
+.today-row.glow{display:block;margin:0 0 12px;padding:16px;border-radius:var(--r-glow);background:var(--glow-bg)}
+.today-row.glow[data-press]{background:var(--glow-bg)}
+.today-row.glow .glow-body{margin-top:10px}
+.today-row.glow .glow-title{font-size:22px}
+.today-row.glow .chg{color:var(--label);opacity:.72;margin-right:-6px}
+
+/* --------------------------------------------------- desktop (≥1000px) --- */
+.cols{display:block}
+@media (min-width:1000px){
+  #app{max-width:1080px;padding-top:32px}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+  .cols>*{min-width:0}
+  #app .list{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  #modal-root .list,.narrow .list{display:flex;flex-direction:column}
+  .narrow{max-width:640px;margin:0 auto}
+  .tiles{grid-template-columns:repeat(4,1fr)}
+  .cols .tiles{grid-template-columns:1fr 1fr}
+  #tabbar{
+    left:50%;right:auto;bottom:16px;transform:translateX(-50%);width:520px;
+    border:var(--hair) solid var(--sep-op);border-radius:var(--r-xl);
+    padding:7px 10px 9px;box-shadow:0 12px 40px -10px rgba(0,0,0,.5);
+  }
+  #tabbar button.start{margin-top:-26px}
+  .sheet{left:50%;right:auto;margin-left:-320px;width:640px;border-radius:var(--r-xl) var(--r-xl) 0 0}
+  .center{width:340px}
+  #timer{left:50%;right:auto;margin-left:-260px;width:520px;bottom:112px}
+  /* 520px fits the clock, the bar and all three controls on one line again */
+  #timer.rest{flex-direction:row;align-items:center;gap:14px}
+  #timer.rest>div:first-child{flex:1;min-width:0}
+  .exmedia img,.exmedia .exmedia-x{height:380px}
+  .hm-wrap{display:flex;flex-direction:column;align-items:center}
+}

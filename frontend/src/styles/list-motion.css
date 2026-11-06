@@ -1,0 +1,182 @@
+/* ============================================================================
+   Lift Book — list and control motion
+   ----------------------------------------------------------------------------
+   Loaded by main.jsx after _motion.css, so the shared keyframes and tokens are
+   already in hand and anything here can override the foundation where a control
+   needs it.
+
+   Two things live in this file:
+
+     1. LIST ENTRY AND LIST CHANGE — Library, History, Plan and RoutineEdit.
+     2. THE SHARED CONTROL SET (components/ui.jsx) — the switch knob, the
+        segmented pill, the check tick, the slider. They are here rather than in
+        index.css because index.css is shared with three other workstreams and
+        every control in ui.jsx is owned by this one; keeping the motion beside
+        the component that owns it beats keeping it beside the rest of its paint.
+
+   House rules from _motion.css apply unchanged — transform and opacity only,
+   exit shorter than entry and along the same path, bounce only where something
+   landed.
+   ========================================================================== */
+
+/* ======================= staggered list entry ============================ */
+/*
+   Every animated list wraps each row in a `.ls-i`. The wrapper, not the `.item`
+   itself, carries the entry animation for one specific reason: press.js paints a
+   pressed row with `transform: scale(.97)` on `.item`, and a running animation
+   outranks a transition on the same property — a row tapped mid-entry would
+   ignore the press entirely. One box does arrival, the box inside it does press,
+   and the two can never fight.
+
+   `--i` is the row's plain array index, handed down from JSX. The 6-step CAP is
+   applied here rather than in JS because it is a motion decision, not a data one:
+   the call sites stay a bare index, and if the cap is ever retuned it is retuned
+   in the one place that already knows what 28ms means. A 40-row library that
+   staggered all the way down would take over a second to finish arriving and read
+   as a stuck list, not as polish.
+
+   THE WHOLE ANIMATION IS SCOPED TO `.ls-enter`, NOT JUST THE DELAY, and that is a
+   correction. The first version put the rise on every `.ls-i` and used the
+   container only to gate the stagger, on the reasoning that a row mounting later
+   should still arrive rather than blink in. In a static list that reads fine. In
+   the Library it is wrong, because the Library's list is not static: tapping a
+   body-part chip replaces nearly every row in it, so every one of them was a fresh
+   node and the entire screen cross-faded for a third of a second on a filter tap —
+   and every backspace that widened the search did it again, so holding delete
+   turned the list into a strobe. A row appearing because the FILTER changed has not
+   arrived from anywhere; it is the answer to what you just typed, and the honest
+   thing for it to do is be there. Arrival is the view arriving. Everything after
+   that is a change, and a change does not re-perform.
+*/
+.ls-enter > .ls-i {
+  /* `both` so the row holds the keyframe's opening frame through its delay —
+     without it every row paints at full opacity first and then blinks out to
+     start its own animation. */
+  animation: m-rise-in var(--t-med) var(--ease-out) both;
+  animation-delay: calc(min(var(--i), 6) * 28ms);
+}
+
+/* A row on its way out. Exit is --t-exit against a --t-med entrance and takes the
+   same path back (rise in, rise out), per rule 2. `forwards` holds the last frame
+   so it cannot flash back to full opacity in the frame before it unmounts, and
+   pointer-events go so a half-faded row can't be tapped.
+
+   Written with the container in the selector so it outranks the enter rule above on
+   specificity rather than on source order — a row deleted while its list is still
+   inside the entry window has to leave, not restart its arrival. */
+.list > .ls-i.ls-out {
+  animation: m-rise-out var(--t-exit) var(--ease-in) forwards;
+  pointer-events: none;
+}
+
+/* ===================== the horizontal chip strip ========================= */
+/*
+   `.chips` is a horizontal scroller that hard-clips at both edges, so a chip half
+   off screen is sliced down the middle with a straight razor line. iOS fades it
+   instead. The mask only appears on the side that actually has more content —
+   Library sets `data-edge` from a passive scroll listener — because a permanent
+   left fade would grey out the "All" chip while you are sitting at scroll zero.
+
+   A mask is a static paint, not an animation: nothing here runs per frame, so the
+   transform-and-opacity budget is untouched. The transition is on mask-image,
+   which cannot interpolate, so the fade in/out of the mask itself is a step —
+   deliberately, because a fading fade is a thing nobody has ever noticed.
+*/
+.chips[data-edge="start"] { mask-image: linear-gradient(90deg, transparent, #000 22px) }
+.chips[data-edge="end"]   { mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent) }
+.chips[data-edge="both"]  { mask-image: linear-gradient(90deg, transparent, #000 22px, #000 calc(100% - 22px), transparent) }
+
+/* ========================== the control set =============================== */
+
+/* --- switch ---------------------------------------------------------------
+   The knob travelled on the sheet curve, which decelerates into its stop and
+   simply arrives. A switch is the clearest "landed" event in the whole control
+   set — a physical thing thrown from one end to the other — so it is exactly the
+   case rule 3 allows a spring for. --ease-spring is damped at .85, so it settles
+   in about 1% of overshoot: felt, not seen.
+
+   The track colour deliberately keeps the plain curve. A background that springs
+   would have to overshoot into a colour that does not exist. */
+.sw .knob {
+  transition:
+    transform var(--t-med) var(--ease-spring),
+    width var(--t-press) var(--ease-out);
+}
+
+/* --- segmented ------------------------------------------------------------
+   Same argument as the switch: the pill is a physical object being thrown into a
+   slot, and it lands. It also travels further than anything else in the set, so
+   the plain curve made it read as slow — the spring gets it there sooner and
+   settles the difference. */
+.seg-sel {
+  transition: transform var(--t-med) var(--ease-spring);
+}
+
+/* --- checkbox -------------------------------------------------------------
+   The tick used to fade up on `color` alone, which for the most-tapped control in
+   the app is nothing at all. It now springs in from a smaller scale.
+
+   A TRANSITION, not `m-pop`, and that is the whole trick: transitions do not run
+   on first paint. An already-ticked box that mounts — every set row when you
+   re-open a workout — renders settled and silent, where an animation would have
+   made the whole screen pop at once on arrival. Only a box that actually changes
+   under your finger gets the beat.
+
+   .5 rather than 0, per rule 4: growing from nothing reads as a spinner. */
+.chk .icn {
+  transform: scale(.5);
+  opacity: 0;
+  transition:
+    transform var(--t-fast) var(--ease-spring),
+    opacity var(--t-press) linear;
+}
+.chk.on .icn { transform: none; opacity: 1 }
+
+/* --- slider ---------------------------------------------------------------
+   The fill was sized with `width: %` and the knob placed with `left: %`, both
+   rewritten on every pointermove. That is a layout and a paint per frame on the
+   one control in the app you hold your finger on — the exact thing rule 1 exists
+   to stop. Both are transforms now:
+
+     · the fill scales on X from its left edge. Its own border-radius stops being
+       round under the scale, but the track clips to a pill anyway, so the only
+       rounded end you can actually see belongs to the track.
+     · the knob rides a full-width, zero-height rail (`.sld-knobw`). translateX on
+       a percentage resolves against the element's OWN width, so a 26px knob could
+       never place itself along a track it does not span — the rail spans it, and
+       the knob only has to centre itself on the rail's leading edge.
+
+   No transition on either: during a drag the finger IS the animation, and a
+   transition would put the fill behind the thumb. The knob's grow-on-grab keeps
+   its own transition below. */
+.sld-fill {
+  width: 100%;
+  transform-origin: left center;
+}
+.sld-knobw {
+  position: absolute;
+  left: 0; right: 0;
+  height: 0;
+  pointer-events: none;
+}
+.sld-knob {
+  left: 0;
+  /* Only the grab response is allowed to transition. Position is driven by the
+     rail, so the knob's own transform is nothing but the -50% centring and the
+     scale — which means the grow can transition without ever lagging the finger. */
+  transition: transform var(--t-fast) var(--ease-out);
+}
+
+/* ========================= reduced motion ================================ */
+/*
+   _motion.css already forces every delay to 0 and redefines m-rise-in/out as pure
+   cross-fades, so the stagger flattens and the rows fade rather than travel with
+   no help from this file. What is left to handle here is the part it cannot know
+   about: the two springs, which must not overshoot, and the check tick, whose
+   travel is a transition rather than one of the shared keyframes.
+*/
+@media (prefers-reduced-motion: reduce) {
+  /* the confirmation survives as a cross-fade; the growth does not */
+  .chk .icn { transform: none }
+  /* the mask is paint, not motion, and stays — it is an affordance either way */
+}

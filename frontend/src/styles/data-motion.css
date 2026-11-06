@@ -1,0 +1,152 @@
+/* ============================================================================
+   data-motion.css — charts, maps and readouts
+   ----------------------------------------------------------------------------
+   Loaded by main.jsx after _motion.css, so the tokens, the shared keyframes and
+   the reduced-motion clamp are all already in force. Everything here obeys them.
+
+   The through-line: this is the part of the app that reports on the past, and a
+   report should arrive composed rather than assemble itself in front of you. So
+   the motion is all *arrival* — a sweep, a draw, a fade — and it happens once,
+   on the way in. Nothing here re-animates because a tooltip moved or a range
+   segment was tapped; on a change, things TRANSITION from where they were, which
+   is a different statement and the honest one (see the bars, below).
+   ========================================================================== */
+
+/* ============================= rolling readouts ========================== */
+/*
+   lib/roll.js counts these to their new value. tabular-nums is already set on
+   `body`, but it is restated here because it is load-bearing rather than
+   cosmetic: with proportional digits a 1 is narrower than an 8, so every frame
+   of a roll would be a slightly different width and the figure would shiver
+   against whatever sits beside it. Repeated on the wrapper too, so the unit that
+   follows the number holds still as well.
+*/
+.tile .v, .stat-v, .card .big { font-variant-numeric: tabular-nums }
+
+/* =============================== line chart ============================== */
+/*
+   The stroke draws itself on, once per view. `stroke-dashoffset` is the one
+   sanctioned non-transform property in the app (_motion.css rule 1) because it
+   is not a stand-in for the technique, it IS the technique — there is no way to
+   reveal a curve along its own length with transform and opacity.
+
+   Length comes from getTotalLength() at mount and lands in --draw, and LineChart
+   strips both the property and the class when the animation is done. That
+   cleanup is not tidiness: leaving dasharray pinned to the old total means the
+   next point appended to the curve falls past the end of the dash and draws as a
+   gap in the line.
+*/
+@keyframes chart-draw { from { stroke-dashoffset: var(--draw) } to { stroke-dashoffset: 0 } }
+
+/* 420ms, down from 600. The draw is an arrival rather than a response to a tap, so it
+   is allowed to be the longest thing on the screen — but 600ms was long enough that
+   the figures above the chart had finished counting and the chart was still drawing,
+   which made the card read as two arrivals instead of one. DRAW_MS in LineChart.jsx
+   is the same number; if one moves, move the other. */
+.chart-i .cline.draw {
+  stroke-dasharray: var(--draw);
+  animation: chart-draw 420ms var(--ease-out) both;
+}
+
+/*
+   The gradient fill under the curve and the dots on it are pure CSS, with no JS
+   gate, because a CSS animation runs when the *node* is created and React reuses
+   these nodes across every re-render — so "once per view" comes free and a
+   tooltip hover cannot restart them. The fill trails the stroke slightly and the
+   end dot waits for the line to reach it, so the order reads as cause and
+   effect: the line arrives, then what it carries.
+
+   The dots fade rather than pop. A pop would be earned here (something landing,
+   rule 3) but the chart's viewBox is stretched by preserveAspectRatio="none",
+   so a scale on a child is scaled unevenly too and the beat would come out
+   lopsided by an amount that changes with the container width.
+*/
+.chart-i polygon { animation: m-fade-in var(--t-slow) var(--ease-out) 100ms both }
+.chart-i circle  { animation: m-fade-in var(--t-med) var(--ease-out) 300ms both }
+
+/* The crosshair and its dot belong to the finger, not to the entrance: they are
+   drawn under the pointer and must be there on the frame it lands. */
+.chart-i g circle { animation: none }
+
+@media (prefers-reduced-motion: reduce) {
+  /* No draw-on at all — a line unspooling is travel, which is the thing reduced
+     motion asks to be spared. The curve is simply present. LineChart also skips
+     measuring in this case; this is the belt to that braces. */
+  .chart-i .cline.draw { stroke-dasharray: none; animation: none }
+}
+
+/* ================================= heatmap =============================== */
+/*
+   A year of daily cells fades in a COLUMN at a time. Per cell it would be 371
+   delays, and a grid that dissolves in cell by cell does not read as a reveal,
+   it reads as a rendering fault.
+
+   4ms a column over 53 columns is a ~210ms sweep, ~410ms including the fade, so
+   the whole year is in inside half a second (and the last column, today, is the
+   one it lands on — the sweep runs oldest to newest so it ends where the scroll
+   position already is). The delay arrives as --hm-d from Heatmap.jsx, which is
+   where the per-column arithmetic lives.
+*/
+.hm-col { animation: m-fade-in var(--t-med) var(--ease-out) var(--hm-d, 0ms) both }
+/* The legend is a caption, not part of the year: it comes in whole, at the end. */
+.hm-legend { animation: m-fade-in var(--t-med) var(--ease-out) 240ms both }
+
+/* ================================ body map =============================== */
+/*
+   The geometry is ~90 KB and fetched on first render (BodyMap.jsx), so the SVGs
+   do not exist until it lands. That makes the reveal self-keying: a CSS
+   animation on node creation cannot fire before the paths are there, which is
+   exactly the "key off the geometry arriving" requirement, with no JS and no
+   second source of truth about when the data showed up.
+
+   The silhouette establishes the body first, then the muscles light up down it —
+   18 groups at 10ms is a ~180ms sweep. Opacity only: a transform on an SVG path
+   needs transform-box/transform-origin to behave, and there is nothing a scale
+   would add to a muscle that is already changing colour.
+
+   Note what does NOT re-run here. The paths are keyed by slug, so toggling the
+   window from Week to 90d keeps the same nodes and only `fill` transitions
+   (.bm-m in index.css). The reveal is for arriving; the fill transition is for
+   changing. Conflating them would re-dissolve the whole body on every tap.
+*/
+.bm-sil { animation: m-fade-in var(--t-med) var(--ease-out) both }
+.bm-m   { animation: m-fade-in var(--t-med) var(--ease-out) calc(var(--bm-i, 0) * 10ms + 60ms) both }
+
+/* ============================ bars and meters ============================ */
+/*
+   Every bar eases from its previous value, never from zero. This is the whole
+   point: these bars are re-read when you change the window, and one that empties
+   and refills claims the muscle went to nothing and came back, which is a lie
+   about what changed. A CSS transition interpolates from the current computed
+   value, so "from where it was" is simply what you get — provided the node
+   survives, which is why the rows are keyed by muscle slug and by bin rather
+   than by index.
+
+   ON `width`: _motion.css rule 1 says transform and opacity, and this breaks it
+   deliberately. The bar is 74x5 with a 3px radius on a 3px half-height — it is a
+   pill, and scaleX squashes the cap into an ellipse that visibly changes shape
+   through the whole transition. The permitted exception. It is affordable: at
+   most six of these exist on a card, they only move on a deliberate tap, and
+   nothing here is on screen during a workout.
+
+   Scoped to `.mrow` so the rest timer's own `#timer .bar i` — which is on a 1s
+   linear countdown and must stay that way — is untouched.
+*/
+.mrow .bar i { transition: width var(--t-med) var(--ease-out), background var(--t-med) linear }
+
+/* The muscle-balance / coverage / histogram rows arrive with the card, top-down.
+   Capped at six steps: past that the stagger stops reading as an order and starts
+   reading as a queue, and these lists can run to a dozen rows.
+
+   GATED ON `.ls-enter`, the same flag the row lists use, and for the same reason
+   (see the long note in list-motion.css). Ungated this fired on node creation, and
+   these rows are created far more often than the card is: every one of these three
+   cards has a range segment above it, and tapping 30d → 90d swaps out every muscle
+   that dropped in or out of the window, so those rows re-dissolved with up to a
+   fifth of a second of stagger delay in front of them. Worse, tapping a muscle on
+   the body map and tapping it again unmounts and re-mounts the whole top-four list,
+   so the card dissolved itself every time you dismissed a selection. The bars
+   underneath already say what a range change did — they ease from their old value
+   to the new one, which is the honest statement — and the rows carrying them should
+   simply be there to be read. */
+.ls-enter .mrow { animation: m-rise-in var(--t-med) var(--ease-out) calc(min(var(--row-i, 0), 6) * 20ms) both }

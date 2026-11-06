@@ -1,0 +1,213 @@
+/* ============================================================================
+   Lift Book — motion foundation
+   ----------------------------------------------------------------------------
+   Loaded after index.css, so anything here is the final word. The per-area
+   sheets (workout-, nav-, list-, data-, reward-motion.css) load after this one
+   and build on the tokens and keyframes it defines.
+
+   House rules, in the order they matter:
+
+   1. TRANSFORM AND OPACITY ONLY. WKWebView runs web animations at 60fps with no
+      ProMotion, so the budget is 16.6ms a frame and there is nothing spare.
+      Animating width/height/top/left on anything that moves during a workout is
+      a dropped frame you will feel.
+   2. EXIT IS SHORTER THAN ENTER, AND TAKES THE SAME PATH BACK. Enter decelerates
+      (--ease-out), exit accelerates away (--ease-in). Something that slid up
+      slides down; something that only faded in only fades out.
+   3. BOUNCE IS EARNED, NOT DECORATION. A spring is right when a gesture carried
+      momentum into it, or when something landed — a tick, a badge. It is wrong
+      on anything that merely appeared.
+   4. NEVER ANIMATE FROM scale(0). Start from .92-.96 and let opacity do the rest;
+      growing from nothing reads as a loading spinner, not an arrival.
+   5. REPEATED ACTIONS STAY UNDER ~300ms. The set-complete beat fires dozens of
+      times a session. Anything you will do twice a minute must never feel like
+      a wait.
+   6. REDUCED MOTION KEEPS THE CONFIRMATION. Travel, springs, parallax and
+      stagger come off; a ~180ms cross-fade stays, because a set that ticks with
+      no visible change is a bug, not an accessibility win.
+   ========================================================================== */
+
+/* -------------------------------------------------------- shared keyframes -- */
+/* Named once here so five area sheets don't each grow their own near-copy. */
+
+@keyframes m-fade-in   { from { opacity: 0 } to { opacity: 1 } }
+@keyframes m-fade-out  { from { opacity: 1 } to { opacity: 0 } }
+@keyframes m-rise-in   { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
+@keyframes m-rise-out  { from { opacity: 1; transform: none } to { opacity: 0; transform: translateY(6px) } }
+@keyframes m-drop-in   { from { opacity: 0; transform: translateY(-10px) } to { opacity: 1; transform: none } }
+@keyframes m-drop-out  { from { opacity: 1; transform: none } to { opacity: 0; transform: translateY(-8px) } }
+@keyframes m-scale-in  { from { opacity: 0; transform: scale(.94) } to { opacity: 1; transform: none } }
+@keyframes m-scale-out { from { opacity: 1; transform: none } to { opacity: 0; transform: scale(.96) } }
+/* the landing beat — a thing arriving in place, not appearing from nothing */
+@keyframes m-pop       { 0% { transform: scale(.6); opacity: 0 } 55% { transform: scale(1.14); opacity: 1 } 100% { transform: scale(1) } }
+
+/* ============================ press feedback ============================== */
+/*
+   `[data-press]` is set on pointerdown by lib/press.js and removed the moment the
+   finger lifts or starts to scroll. Every rule below sits next to the component's
+   own `:active` rule so the two can never drift; `:active` is kept as the
+   keyboard/mouse path and as the fallback if the listener never binds.
+
+   Full-width list rows highlight but do not scale — that is what iOS does, and a
+   row scaling inside a clipped grouped-list box looks broken. Card-shaped things
+   (tiles, chips, day cells, the today row) scale, because they read as objects.
+*/
+
+button, [role="button"], [role="switch"], [role="checkbox"],
+.item, .lrow.tap, .chip, .tile.tappable, .wday, .cal-d,
+.swatch, .glyph-cell, .today-row, .noteline {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* card-shaped surfaces: the global .97 press */
+.item, .chip, .tile.tappable, .wday, .cal-d, .today-row, .glyph-cell, .swatch {
+  transition: transform var(--t-press) var(--ease-out), background var(--t-press) linear;
+}
+.item[data-press], .tile.tappable[data-press], .today-row[data-press], .cal-d[data-press], .wday[data-press] {
+  transform: scale(.97);
+}
+.chip[data-press] { transform: scale(.94) }
+.glyph-cell[data-press], .swatch[data-press] { transform: scale(.92) }
+
+.item[data-press], .chip[data-press], .tile.tappable[data-press], .cal-d[data-press], .wday[data-press] { background: var(--surface-2) }
+.today-row[data-press] { background: var(--surface-3) }
+
+/* rows: tint only */
+.lrow.tap { transition: background var(--t-press) linear }
+.lrow.tap[data-press] { background: var(--surface-2) }
+.helpbtn[data-press] { color: var(--label) }
+.noteline[data-press] { opacity: .55 }
+
+/* buttons */
+.btn { transition: transform var(--t-press) var(--ease-out), background var(--t-fast) linear, opacity var(--t-fast) linear }
+.btn[data-press] { transform: scale(.97) }
+.btn.primary[data-press] { background: var(--acc-2) }
+.btn.ghost[data-press], .btn.plain[data-press] { background: var(--surface-2) }
+.iconbtn[data-press] { background: var(--surface-2); transform: scale(.92) }
+.bw-pm[data-press] { background: var(--surface-2); transform: scale(.92) }
+
+/* controls */
+.seg button[data-press] { opacity: .5 }
+.stp button { transition: background var(--t-press) linear, transform var(--t-press) var(--ease-out) }
+.stp button[data-press] { background: var(--surface-3); transform: scale(.9) }
+.chk[data-press], .ck[data-press] { transform: scale(.9) }
+.setrow .setgo[data-press]:not(:disabled) { background: var(--surface-3); transform: scale(.9) }
+.sw[data-press] .knob { width: 31px }
+.sw.on[data-press] .knob { transform: translateX(16px) }
+#tabbar button.start[data-press] .cir { transform: scale(.93) }
+
+/* A popover grows out of what opened it, never out of its own middle. */
+.center, .sheet { transform-origin: 50% 100% }
+
+/* ====================== sheets, dialogs and the backdrop ================== */
+/*
+   These used to vanish on the frame `closeSheet` ran — the single loudest
+   "website" tell left in the app. A pure-CSS exit cannot work here: React owns
+   the node and removes it, so there is nothing left for `transition-behavior:
+   allow-discrete` to transition, and Safari has no `overlay` property to keep it
+   in the top layer while it goes. (Both were tried; neither survives unmount.)
+
+   So useUI marks the sheet `closing` and unmounts it --t-exit later. Modals.jsx
+   already faked exactly this for swipe-to-dismiss; that is now the one mechanism
+   everything uses. Exit is 160ms against a 300ms entrance, per rule 2.
+*/
+
+.mback {
+  animation: m-fade-in var(--t-med) var(--ease-out);
+}
+.sheet {
+  animation: m-sheet-in var(--t-slow) var(--ease-sheet);
+}
+.center {
+  animation: m-center-in var(--t-med) var(--ease-out);
+}
+
+@keyframes m-sheet-in  { from { transform: translateY(100%) } to { transform: none } }
+@keyframes m-sheet-out { from { transform: none } to { transform: translateY(100%) } }
+@keyframes m-center-in {
+  from { transform: translate(-50%, -50%) scale(.94); opacity: 0 }
+  to   { transform: translate(-50%, -50%) scale(1);   opacity: 1 }
+}
+@keyframes m-center-out {
+  from { transform: translate(-50%, -50%) scale(1);   opacity: 1 }
+  to   { transform: translate(-50%, -50%) scale(.96); opacity: 0 }
+}
+
+.mback.closing  { animation: m-fade-out var(--t-exit) var(--ease-in) forwards }
+.sheet.closing  { animation: m-sheet-out var(--t-exit) var(--ease-in) forwards }
+.center.closing { animation: m-center-out var(--t-exit) var(--ease-in) forwards }
+/* A sheet already dragged partway down by a finger finishes from where the finger
+   left it, on the inline transform Modals.jsx is driving. The keyframes would win
+   over that inline transform (animations outrank normal declarations), so the drag
+   handler sets `animation:none` inline for the length of the gesture. */
+.sheet.closing[style*="translateY"] { animation-name: none }
+
+/* The rest timer's keyframe lives here with the rest of the shared set; the rule that
+   plays it lives in workout-motion.css, because the only thing that ever brings the bar
+   on screen is a set being checked off and its half-beat delay belongs to that beat. It
+   was declared in both files, identically but for the delay — one of them was always
+   going to be retuned alone. */
+@keyframes m-timer-in { from { transform: translateY(16px); opacity: 0 } to { transform: none; opacity: 1 } }
+
+/* ======================== reduced motion / transparency ================== */
+/*
+   The old rule was `*{animation:none!important;transition:none!important}`, which
+   also deleted the tick confirming a set. Instead: everything is clamped to one
+   short pass, the curves go linear so nothing can overshoot, stagger delays are
+   dropped, and the travel keyframes are redefined to pure cross-fades. What
+   survives is the part that carries meaning.
+*/
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 180ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    animation-timing-function: linear !important;
+    transition-duration: 180ms !important;
+    transition-delay: 0ms !important;
+    transition-timing-function: linear !important;
+  }
+  /* redefining a @keyframes later in the cascade replaces it wholesale, so every
+     existing user of these names loses its travel without touching a call site */
+  @keyframes m-rise-in   { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes m-rise-out  { from { opacity: 1 } to { opacity: 0 } }
+  @keyframes m-drop-in   { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes m-drop-out  { from { opacity: 1 } to { opacity: 0 } }
+  @keyframes m-scale-in  { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes m-scale-out { from { opacity: 1 } to { opacity: 0 } }
+  @keyframes m-pop       { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes m-sheet-in  { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes m-sheet-out { from { opacity: 1 } to { opacity: 0 } }
+  @keyframes m-timer-in  { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes viewfade    { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes sheetup     { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes slideup     { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes pop {
+    from { transform: translate(-50%, -50%); opacity: 0 }
+    to   { transform: translate(-50%, -50%); opacity: 1 }
+  }
+  @keyframes ping { from { opacity: .5 } to { opacity: 0 } }
+  /* the press scale goes; the tint stays, so a tap is still acknowledged */
+  [data-press] { transform: none !important }
+  .center, .center.closing {
+    animation-name: m-fade-in;
+    transform: translate(-50%, -50%) !important;
+  }
+  .center.closing { animation-name: m-fade-out }
+  html { scroll-behavior: auto !important }
+}
+
+/* Raise the surface and drop the blur rather than dropping the element — these
+   bars have to stay legible over whatever is scrolling underneath them. */
+@media (prefers-reduced-transparency: reduce) {
+  #tabbar, #timer, #toast, .exmedia .gifhint, .exmedia .giftoggle, .mback {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  #tabbar { background: var(--bg-el) }
+  /* #timer is the opaque glow card now; there is nothing behind it to reduce */
+  #toast  { background: var(--surface-2) }
+  .mback  { background: rgba(0, 0, 0, .62) }
+  .exmedia .gifhint, .exmedia .giftoggle { background: rgba(0, 0, 0, .78) }
+}

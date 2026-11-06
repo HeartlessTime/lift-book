@@ -1,0 +1,59 @@
+PODS:
+  - Capacitor (8.6.0):
+    - CapacitorCordova
+  - CapacitorCordova (8.6.0)
+  - CapacitorFilesystem (8.1.5):
+    - Capacitor
+    - IONFilesystemLib (= 2.0.1)
+  - CapacitorHaptics (8.0.2):
+    - Capacitor
+  - CapacitorLocalNotifications (8.3.1):
+    - Capacitor
+  - CapacitorShare (8.0.3):
+    - Capacitor
+  - CapgoCapacitorHealth (8.11.12):
+    - Capacitor
+  - IONFilesystemLib (2.0.1)
+
+DEPENDENCIES:
+  - "Capacitor (from `../../node_modules/@capacitor/ios`)"
+  - "CapacitorCordova (from `../../node_modules/@capacitor/ios`)"
+  - "CapacitorFilesystem (from `../../node_modules/@capacitor/filesystem`)"
+  - "CapacitorHaptics (from `../../node_modules/@capacitor/haptics`)"
+  - "CapacitorLocalNotifications (from `../../node_modules/@capacitor/local-notifications`)"
+  - "CapacitorShare (from `../../node_modules/@capacitor/share`)"
+  - "CapgoCapacitorHealth (from `../../node_modules/@capgo/capacitor-health`)"
+
+SPEC REPOS:
+  trunk:
+    - IONFilesystemLib
+
+EXTERNAL SOURCES:
+  Capacitor:
+    :path: "../../node_modules/@capacitor/ios"
+  CapacitorCordova:
+    :path: "../../node_modules/@capacitor/ios"
+  CapacitorFilesystem:
+    :path: "../../node_modules/@capacitor/filesystem"
+  CapacitorHaptics:
+    :path: "../../node_modules/@capacitor/haptics"
+  CapacitorLocalNotifications:
+    :path: "../../node_modules/@capacitor/local-notifications"
+  CapacitorShare:
+    :path: "../../node_modules/@capacitor/share"
+  CapgoCapacitorHealth:
+    :path: "../../node_modules/@capgo/capacitor-health"
+
+SPEC CHECKSUMS:
+  Capacitor: 62cab4ab4ba04ea925576ddd1be188869e90d9ea
+  CapacitorCordova: 922f0a94dae286165215f0c7cf16fbde662d5ee4
+  CapacitorFilesystem: e3bc7123acb1554df1b7b099fa5847064b9e1bd4
+  CapacitorHaptics: 296f771ecd89c7a1bd92a7b6826a7d268e2e70f5
+  CapacitorLocalNotifications: e0747a329ddde3074d52dc74a003688af90e42be
+  CapacitorShare: 5b5e53347556bee89ae6163ed20b5b3c25fe75f1
+  CapgoCapacitorHealth: cf83bdd73f81359c3123582231ccf7725a8c21a8
+  IONFilesystemLib: 306469e4c563f61de82d7bca2bbfed9e64d1b2d2
+
+PODFILE CHECKSUM: fe4eacb6cb10eea32ac7d1e9b27cd2b13fb1b65f
+
+COCOAPODS: 1.17.0

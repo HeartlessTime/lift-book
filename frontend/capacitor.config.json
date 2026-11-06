@@ -1,0 +1,6 @@
+{
+  "appId": "com.example.liftbook",
+  "appName": "Lift Book",
+  "webDir": "dist",
+  "backgroundColor": "#0c0e12"
+}

@@ -1,0 +1,11 @@
+# Live user data — passkey credentials, the session-signing secret, VAPID keys and every
+# profile's workout history. None of it belongs in a repo whose origin is a public mirror.
+data/
+.env
+# Native build config — carries the device token in plaintext.
+.env.local
+
+node_modules/
+dist/
+*.bak
+*.bak-*

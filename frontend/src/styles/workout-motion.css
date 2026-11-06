@@ -1,0 +1,174 @@
+/* ============================================================================
+   workout-motion.css — the set-complete beat
+   ----------------------------------------------------------------------------
+   Loaded by main.jsx after _motion.css, so the tokens, the shared keyframes and
+   the reduced-motion clamp are all already in force here.
+
+   Everything in this file serves one interaction: the checkbox at the end of a
+   set row. It is the #1 tap in the app — dozens of times a session, phone
+   propped on a bench, thumb chalky — and until now it *snapped*: the circle
+   filled, the row dropped to 45% opacity, the set number went accent, the
+   progress bar jumped and the rest bar appeared, all on the same frame with not
+   one transition declared between them. Five separate things happening at once
+   with no relationship to each other reads as a page repainting, not as a set
+   being recorded.
+
+   So it is staged as one gesture instead, and the whole thing is spent inside
+   ~250ms (house rule 5: under ~300ms, because you will do this again in ninety
+   seconds and a beat you have to wait out becomes a beat you resent):
+
+     0ms    finger down — press.js scales the circle to .9, commit() fires
+     0ms    the tick lands, spring, 160ms
+     0ms    the row settles back to .45 and the number goes accent, 160ms
+     0ms    the progress bar advances, 200ms
+     50ms   the rest bar rises, 200ms   → last frame at 250ms
+
+   The rest bar's 50ms is the only delay in here and it is the load-bearing one:
+   started on the same frame as the tick it reads as a second, unrelated event,
+   and started much later it reads as lag. Half a beat behind reads as caused by.
+
+   The "just landed" classes (`.land`, `.exland`) are put on by Workout.jsx and
+   are only ever true for the ~400ms after a set's own timestamp. They exist
+   because a `.chk.on` animation with no gate replays on every mount — walk back
+   to a finished exercise with Prev and all four ticks would pop at you, which is
+   bounce that nothing earned (house rule 3).
+   ========================================================================== */
+
+/* ------------------------------------------------------------- the tick --- */
+/*
+   The circle grows into place rather than appearing filled. Amplitude lives in
+   the keyframe stops, not in the curve: --ease-spring is a linear() that peaks
+   at 1.0063, which across a .84→1 range is about a thousandth of a pixel on a
+   36px circle. The curve supplies the settle — the little deceleration ripple
+   that makes it read as landing on something — and the stops supply the pop.
+
+   No `forwards`: the animation ends at scale(1), which is what the element's own
+   transform already is, so there is nothing to hold and nothing to snap back.
+*/
+@keyframes wk-chk-land {
+  0%   { transform: scale(.84) }
+  58%  { transform: scale(1.07) }
+  100% { transform: scale(1) }
+}
+/* The glyph is a beat behind the circle it sits in and travels further, so the
+   checkmark reads as arriving *into* the circle rather than as the circle
+   changing colour with a mark already printed on it. .55 not 0 — growing from
+   nothing is a loading spinner (house rule 4). */
+@keyframes wk-chk-mark {
+  0%   { transform: scale(.55); opacity: 0 }
+  45%  { opacity: 1 }
+  70%  { transform: scale(1.12) }
+  100% { transform: scale(1); opacity: 1 }
+}
+
+.setwrap.land .chk.on        { animation: wk-chk-land var(--t-fast) var(--ease-spring) }
+.setwrap.land .chk.on .icn   { animation: wk-chk-mark var(--t-med) var(--ease-spring) 20ms backwards }
+
+/*
+   AND THE PRESS UNDERNEATH HAS TO GET OUT OF THE WAY. The landing animation runs for
+   160ms from the moment the circle fills, and a real tap on a bench — thumb down,
+   look at the bar, thumb up — is regularly longer than that. `[data-press]` is still
+   set when the animation ends, so the circle finished its pop and then snapped back
+   to scale(.9) and sat there until the finger lifted: a tick that bounced, shrank,
+   and only then settled. The press scale has already done its job by the time the box
+   is ticked — what it was acknowledging has now happened — so a just-landed tick
+   simply is not pressed any more. Only the transform is overridden; the tint on
+   `.chk.on` is the fill itself and is not press state at all.
+*/
+.setwrap.land .chk.on[data-press] { transform: none }
+
+/* ------------------------------------------------- the row settling back --- */
+/*
+   Both of these had no transition at all. The row is *finished*, so it recedes —
+   but receding instantly looks like it was switched off, and the point of the
+   dimming is to say "this one is behind you", which is a settling motion.
+
+   --t-fast, not --t-med: the row is going away, and something leaving that takes
+   as long as the thing arriving fights it for attention.
+*/
+.setwrap .setrow { transition: opacity var(--t-fast) var(--ease-out) }
+.setrow .n {
+  /* index.css already transitions background and color here on --fast; restated
+     with the curve named so this and the opacity above land together instead of
+     one easing and one running on the UA default. */
+  transition: background var(--t-fast) var(--ease-out),
+              color      var(--t-fast) var(--ease-out),
+              transform  var(--t-fast) var(--ease-out);
+}
+/* The number is the row's own little confirmation — it goes accent at the same
+   moment the tick fills, so give it the same landing rather than a colour swap. */
+.setwrap.land .setrow.done .n { animation: wk-chk-land var(--t-fast) var(--ease-spring) }
+
+/* ---------------------------------------------------------- progress bar --- */
+/*
+   Deliberately still on `width`, and this is the documented exception to
+   transform-and-opacity-only: the bar is 4px tall with a 99px cap on both ends,
+   and scaleX on a rounded cap squashes the cap into an ellipse that visibly
+   changes shape as it grows. On a 4px-high element there is no compositing win
+   worth that — one short layout pass on a single absolutely-sized child costs
+   nothing measurable, and it is the only width animation left in the workout.
+
+   Retimed from --ease-sheet (the curve for something sliding up from the bottom
+   of the screen, which this is not) to --ease-out, so it decelerates into its
+   new length the way the tick decelerates into its circle.
+*/
+.wprog i { transition: width var(--t-med) var(--ease-out) }
+
+/* ------------------------------------------------------------- rest bar --- */
+/*
+   The one rule that plays m-timer-in, which _motion.css defines alongside the rest
+   of the shared keyframe set. It lives here rather than there because the only thing
+   that ever brings the bar on screen is a set being checked off, so its half-beat
+   delay belongs to this beat — and because the same rule minus the delay was sitting
+   in _motion.css too, which is two places to retune one entrance.
+
+   The 50ms delay needs `backwards` or the bar paints at its final position for three
+   frames and then jumps back down to start — a flicker far more noticeable than the
+   delay it was meant to hide.
+*/
+#timer { animation: m-timer-in var(--t-med) var(--ease-out) 50ms backwards }
+
+/* --------------------------------------------------- the exercise card ---- */
+/*
+   The last set of an exercise is a bigger event than the four before it, and
+   nothing in the row can say so — the row does exactly what every other row did.
+   So the card takes the hit: a single shallow compression and back, the physical
+   read of something closing.
+
+   .985 on a full-width card is about 5px of travel at the edges. Anything deeper
+   starts to look like the card was tapped, which it wasn't.
+*/
+@keyframes wk-card-settle {
+  0%   { transform: none }
+  38%  { transform: scale(.985) }
+  100% { transform: none }
+}
+.card.exland { animation: wk-card-settle var(--t-med) var(--ease-out) }
+
+/* --------------------------------------------------------- the PR medal --- */
+/*
+   Pinned to the row, not placed in it: absolutely positioned on the .setwrap so
+   it overlaps the corner of the set-number badge. Two reasons it cannot live
+   inside .setrow — the row is at 45% opacity once it is done and a record should
+   not be the dimmest thing on screen, and the row already fits three steppers
+   and a checkbox on a narrow phone in `eff3` mode with nothing to spare.
+
+   It stays. It is the record of what happened in this session, so it outlives
+   its own animation; only the pop is gated on `.land`, so scrolling back to it
+   later finds it sitting there rather than performing again.
+*/
+.setwrap { position: relative }
+.setpr {
+  position: absolute; left: 12px; top: 3px; z-index: 1;
+  width: 15px; height: 15px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--yellow); color: #000;
+  /* the ring punches the medal out of the set-number circle behind it, in the
+     card's own fill, so the two read as stacked rather than as one shape */
+  box-shadow: 0 0 0 2px var(--surface);
+  pointer-events: none;
+}
+.setpr .icn { font-size: 9px; --icon-stroke: 2.4 }
+/* m-pop is the foundation's landing keyframe — reused rather than re-cut so the
+   medal, and anything else in the app that lands, share one arrival. */
+.setwrap.land .setpr { animation: m-pop var(--t-med) var(--ease-spring) backwards }

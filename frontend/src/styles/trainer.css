@@ -1,0 +1,21 @@
+/* "Tell my trainer" sheet (components/Trainer.jsx). Trainer messages wear the glow card
+   (.glow.sm); his own are plain surface bubbles on the right. */
+/* fills the sheet's own max-height (index.css .sheet) less its padding and grab */
+.tr-sheet{display:flex;flex-direction:column;max-height:calc(90vh - var(--kb) - 53px - var(--sab))}
+.tr-thread{flex:1 1 auto;min-height:80px;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;margin:0 -4px 12px;padding:0 4px}
+.tr-msg{display:flex;flex-direction:column;margin-bottom:10px}
+.tr-msg.me{align-items:flex-end}
+.tr-msg.coach{align-items:flex-start}
+.tr-bubble{max-width:88%;border-radius:16px;padding:9px 12px;line-height:1.42;overflow-wrap:anywhere}
+.tr-msg.me .tr-bubble{background:var(--surface-2);border-bottom-right-radius:6px}
+.tr-msg.coach .tr-bubble.glow{margin-bottom:0;border-bottom-left-radius:6px;max-width:94%}
+.tr-msg.coach .eyebrow{margin-bottom:5px}
+.tr-text{white-space:pre-wrap}
+.tr-meta{font-size:11px;color:var(--label-3);margin-top:3px;padding:0 4px}
+.tr-prop{margin-top:10px;padding-top:10px;border-top:var(--hair, 1px) solid var(--sep)}
+.tr-prop-what{font-weight:500;margin-top:5px;text-transform:none}
+.tr-compose{border-top:var(--hair, 1px) solid var(--sep);padding-top:12px}
+.tr-compose textarea{font-size:17px;min-height:96px}
+/* unread badge on Home's trainer row */
+.tr-badge{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--acc);color:var(--on-acc);
+  font-size:12px;font-weight:600;display:inline-flex;align-items:center;justify-content:center}

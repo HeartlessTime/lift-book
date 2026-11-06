@@ -1,0 +1,18 @@
+# Host node_modules must never reach the image. The frontend stage runs its own `npm ci`
+# (Dockerfile:13) and a later `COPY frontend/ ./` (:14) would otherwise paste macOS-native
+# esbuild/rollup binaries over the Linux ones and break the build.
+node_modules
+**/node_modules
+
+# Build output — regenerated inside the image.
+dist
+**/dist
+
+# Secrets and local overrides. `.env` on its own matches ONLY a root .env — it does not cover
+# frontend/.env.local, which carries the iOS build's device token. Without the globs below
+# `COPY frontend/ ./` bakes that token into the served web bundle.
+.env
+.env.*
+**/.env
+**/.env.*
+*.bak

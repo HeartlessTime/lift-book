@@ -1,0 +1,138 @@
+/* ============================================================================
+   reward-motion.css — PR banner and the end-of-workout moment
+   ----------------------------------------------------------------------------
+   Loaded by main.jsx after _motion.css.
+
+   The restraint here is deliberate and it is the whole design. Strong, Fitbod and
+   Whoop ship no celebration at all; Hevy ships a banner and a medal pinned to the
+   set row, and nothing else. There is no confetti in this file and there should
+   never be — a record you beat every third session cannot also be a party, and an
+   app that throws one turns the moment it is trying to mark into noise.
+
+   Two moments, and they are told apart by how loud they are:
+
+     set record       the heaviest single set you have ever logged for this
+                      exercise. Common — a linear progression produces one most
+                      weeks. Gets the medal on the row (workout-motion.css) and
+                      the tick's own commit() haptic. No banner.
+
+     personal record  a new best estimated 1RM for the exercise, which is the
+                      app's own strongest claim that you are stronger than you
+                      have ever been (lib/onerm.js, and the same thing the finish
+                      summary reports as e1prs). Rare. Gets the banner and
+                      celebrate().
+
+   Both are serialised through the celebration queue in store/useUI.js; nothing in
+   here ever has to share the screen.
+   ========================================================================== */
+
+/* -------------------------------------------------------------- banner ---- */
+/*
+   Enter, hold and exit are one animation over the celebration's whole ttl rather
+   than an entrance plus a `closing` class. Sheets need the two-phase treatment
+   because a person decides when they end; this one ends on a clock, so the clock
+   can own the whole shape. The unmount at ttl then lands on a frame where the
+   banner is already at opacity 0 and there is nothing to see disappear.
+
+   --pr-ttl must match PR_MS in views/Workout.jsx. If one moves, move the other.
+*/
+.prbanner {
+  /* The sentence is two short lines; 2400ms was a third longer than they take to read,
+     and the cost is not only dwell — the celebration queue is one slot, so the banner
+     is also how long the "that's the whole workout" dialog waits when the last set of
+     the session is the one that set the record. 2000ms still leaves ~1.6s of hold. */
+  --pr-ttl: 2000ms;
+  position: fixed; z-index: 210;
+  left: 12px; right: 12px; top: calc(10px + var(--sat));
+  display: flex; align-items: center; gap: 11px;
+  padding: 11px 14px; border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--surface-2) 92%, transparent);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  box-shadow: 0 12px 34px -8px rgba(0, 0, 0, .55);
+  pointer-events: none;      /* it is an announcement, not a control */
+  animation: pr-banner var(--pr-ttl) both;
+}
+.prbanner-m {
+  width: 30px; height: 30px; border-radius: 50%; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--yellow); color: #000; font-size: 16px;
+  /* The trophy lands a beat after the bar it sits on has arrived — the bar is
+     what travelled, so the bar gets the travel and the medal gets the landing. */
+  animation: m-pop var(--t-med) var(--ease-spring) 120ms backwards;
+}
+.prbanner-t { font-size: 15px; font-weight: 600; letter-spacing: -.01em }
+.prbanner-s { font-size: 13px; color: var(--label-2); margin-top: 1px }
+
+/* Percentages, not seconds, because the hold is the only part that should stretch
+   if the ttl is ever retuned: ~160ms in, ~1660ms readable, ~180ms out. Exit is
+   shorter than entry and takes the same path back up (house rule 2), and the
+   per-keyframe timing functions give it ease-out in and ease-in out without
+   needing two animations to do it. */
+@keyframes pr-banner {
+  0%   { opacity: 0; transform: translateY(-14px); animation-timing-function: var(--ease-out) }
+  8%   { opacity: 1; transform: none;              animation-timing-function: linear }
+  91%  { opacity: 1; transform: none;              animation-timing-function: var(--ease-in) }
+  100% { opacity: 0; transform: translateY(-10px) }
+}
+
+/* -------------------------------------------- the end-of-workout moment --- */
+/*
+   A bigger beat than a set landing, and the one place in the app where a couple
+   of seconds is the right budget rather than an indulgence — it happens once a
+   session and it is the only thing on screen.
+
+   It is a stagger, not a fanfare: the trophy lands, then the words, then the
+   numbers, then the button. ~65ms apart, which is far enough that the eye reads
+   an order and close enough that it never reads as four separate arrivals. The
+   card itself is already sliding in on m-center-in underneath all of this.
+
+   The last step is a BUTTON, and that is what sets the budget: the whole sequence
+   has to be finished before anyone reaches for it, or the thing they are reaching
+   for is still moving. The summary's "Nice!" used to land at 660ms; it lands at
+   ~520ms now, and the order still reads.
+
+   `backwards` on every one of them, or each element paints in its final place
+   for the length of its own delay and the stagger becomes a flicker.
+*/
+.wkdone-i, .finsum-i {
+  animation: m-pop var(--t-med) var(--ease-spring) 50ms backwards;
+}
+.wkdone-t, .finsum-t { animation: m-rise-in var(--t-med) var(--ease-out) 120ms backwards }
+.wkdone-b            { animation: m-rise-in var(--t-med) var(--ease-out) 180ms backwards }
+.wkdone-a            { animation: m-rise-in var(--t-med) var(--ease-out) 240ms backwards }
+
+/* The summary has more to say, so it gets one more step: the tiles carry the
+   numbers and the PR lines are the payoff, so the lines come last. */
+.finsum-n  { animation: m-rise-in var(--t-med) var(--ease-out) 185ms backwards }
+.finsum-pr { animation: m-rise-in var(--t-med) var(--ease-out) 255ms backwards }
+.finsum-a  { animation: m-rise-in var(--t-med) var(--ease-out) 320ms backwards }
+
+/* ----------------------------------------------------- reduced motion ----- */
+@media (prefers-reduced-motion: reduce) {
+  /*
+     _motion.css clamps every animation in the app to 180ms, which is right for
+     everything that travels and wrong for exactly one thing: this banner's
+     duration is not travel, it is how long the sentence stays readable. Clamped,
+     a personal record would flash for a sixth of a second and be gone. So the
+     duration comes back and the travel comes out of the keyframe instead — same
+     trade the foundation makes everywhere else, just in the other direction.
+  */
+  .prbanner {
+    animation-duration: var(--pr-ttl) !important;
+    animation-timing-function: linear !important;
+  }
+  @keyframes pr-banner {
+    0%   { opacity: 0 }
+    8%   { opacity: 1 }
+    91%  { opacity: 1 }
+    100% { opacity: 0 }
+  }
+  /* The stagger is the part that has to go — four things arriving in sequence is
+     motion for its own sake once travel is off. They all arrive together, still
+     visibly arriving. */
+  .wkdone-i, .wkdone-t, .wkdone-b, .wkdone-a,
+  .finsum-i, .finsum-t, .finsum-n, .finsum-pr, .finsum-a {
+    animation-name: m-fade-in;
+  }
+}
